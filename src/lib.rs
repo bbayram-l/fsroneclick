@@ -1,4 +1,4 @@
-//! OptiOneClick core library.
+//! FSRoneclick core library.
 
 pub mod compatibility;
 pub mod fidelityfx;

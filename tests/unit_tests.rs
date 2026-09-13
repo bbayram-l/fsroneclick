@@ -1,9 +1,9 @@
-//! Comprehensive unit tests for OptiOneClick.
+//! Comprehensive unit tests for FSRoneclick.
 
-use optioneclick::game::{GameInfo, GraphicsApi, Store, MANIFEST_NAME, OPTI_PROXY, RESHADE_DLL};
-use optioneclick::gpu::Arch;
-use optioneclick::installer::{generate_optiscaler_ini, generate_reshade_ini, uninstall, InstallConfig};
-use optioneclick::renodx::{self, RenoDxMod};
+use fsroneclick::game::{GameInfo, GraphicsApi, Store, MANIFEST_NAME, OPTI_PROXY, RESHADE_DLL};
+use fsroneclick::gpu::Arch;
+use fsroneclick::installer::{generate_optiscaler_ini, generate_reshade_ini, uninstall, InstallConfig};
+use fsroneclick::renodx::{self, RenoDxMod};
 use std::collections::HashMap;
 use std::fs;
 
@@ -43,7 +43,7 @@ fn test_optiscaler_ini_generation_rdna3() {
     config.enable_frame_generation = true;
     config.enable_fsr4_int8 = true;
     config.enable_reshade = true;
-    let compat = optioneclick::compatibility::CompatibilityProfile::default();
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
 
     let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
 
@@ -61,7 +61,7 @@ fn test_optiscaler_ini_generation_rdna3() {
 fn test_optiscaler_ini_generation_non_rdna3() {
     let mut config = InstallConfig::default();
     config.enable_fsr4_int8 = true;
-    let compat = optioneclick::compatibility::CompatibilityProfile::default();
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
 
     let ini = generate_optiscaler_ini(&config, &Arch::Rdna2, &compat);
 
@@ -71,7 +71,7 @@ fn test_optiscaler_ini_generation_non_rdna3() {
 #[test]
 fn test_optiscaler_ini_auto_tuning() {
     let config = InstallConfig::default();
-    let mut compat = optioneclick::compatibility::CompatibilityProfile::default();
+    let mut compat = fsroneclick::compatibility::CompatibilityProfile::default();
     compat.auto_exposure = true;
     compat.non_linear_color_space = true;
     compat.disable_spoofing = true;
@@ -89,7 +89,7 @@ fn test_optiscaler_ini_auto_tuning() {
 
 #[test]
 fn test_compatibility_database_lookups() {
-    use optioneclick::compatibility::{lookup_compatibility, OptiStatus};
+    use fsroneclick::compatibility::{lookup_compatibility, OptiStatus};
 
     // 1. Star Wars Outlaws (Working in OptiScaler + Redstone with FG)
     let swo = lookup_compatibility("Star Wars Outlaws");
@@ -127,7 +127,7 @@ fn test_reshade_ini_generation() {
 
 #[test]
 fn test_manifest_uninstallation_clean_rollback() {
-    let temp_dir = std::env::temp_dir().join(format!("optioneclick_test_{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(format!("fsroneclick_test_{}", std::process::id()));
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).unwrap();
 
@@ -176,7 +176,7 @@ fn test_manifest_uninstallation_clean_rollback() {
         is_re_engine: false,
         anticheat: None,
         fidelityfx_tier: None,
-        compat: optioneclick::compatibility::CompatibilityProfile::default(),
+        compat: fsroneclick::compatibility::CompatibilityProfile::default(),
     };
 
     // Verify initial state
@@ -207,20 +207,20 @@ fn test_manifest_uninstallation_clean_rollback() {
 
 #[test]
 fn test_fidelityfx_catalog() {
-    let catalog = optioneclick::fidelityfx::FidelityFxCatalog::new();
+    let catalog = fsroneclick::fidelityfx::FidelityFxCatalog::new();
     let dummy_path = std::path::Path::new("dummy");
 
     assert_eq!(
         catalog.check_game("Starfield", dummy_path),
-        Some(optioneclick::fidelityfx::FidelityFxTier::Fsr3WithFrameGen)
+        Some(fsroneclick::fidelityfx::FidelityFxTier::Fsr3WithFrameGen)
     );
     assert_eq!(
         catalog.check_game("Ghost of Tsushima", dummy_path),
-        Some(optioneclick::fidelityfx::FidelityFxTier::Fsr3WithFrameGen)
+        Some(fsroneclick::fidelityfx::FidelityFxTier::Fsr3WithFrameGen)
     );
     assert_eq!(
         catalog.check_game("Far Cry 6", dummy_path),
-        Some(optioneclick::fidelityfx::FidelityFxTier::Fsr2)
+        Some(fsroneclick::fidelityfx::FidelityFxTier::Fsr2)
     );
     assert_eq!(
         catalog.check_game("Far Cry 5", dummy_path),
@@ -230,7 +230,7 @@ fn test_fidelityfx_catalog() {
 
 #[test]
 fn test_updater_parse_raw_compatibility_md() {
-    use optioneclick::updater::parse_raw_compatibility_md;
+    use fsroneclick::updater::parse_raw_compatibility_md;
 
     let sample_md = r#"
 # Compatibility List
@@ -265,8 +265,8 @@ fn test_updater_parse_raw_compatibility_md() {
 
 #[test]
 fn test_updater_dynamic_database_overlay() {
-    use optioneclick::compatibility::lookup_compatibility;
-    use optioneclick::updater::parse_raw_compatibility_md;
+    use fsroneclick::compatibility::lookup_compatibility;
+    use fsroneclick::updater::parse_raw_compatibility_md;
 
     // Parse a custom dummy entry
     let custom_md = r#"
@@ -278,11 +278,11 @@ fn test_updater_dynamic_database_overlay() {
     assert_eq!(entries.len(), 1);
 
     // Load into dynamic cache overlay
-    optioneclick::compatibility::load_dynamic_entries(&entries);
+    fsroneclick::compatibility::load_dynamic_entries(&entries);
 
     // Verify lookup finds the newly injected dynamic entry
     let found = lookup_compatibility("Brand New Test Game 2026");
-    assert_eq!(found.opti_status, Some(optioneclick::compatibility::OptiStatus::Working));
+    assert_eq!(found.opti_status, Some(fsroneclick::compatibility::OptiStatus::Working));
     assert!(found.optipatcher_supported);
     assert!(found.auto_exposure);
 }

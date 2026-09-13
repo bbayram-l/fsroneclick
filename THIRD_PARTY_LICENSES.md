@@ -1,6 +1,6 @@
 # Third-Party Notices and Credits
 
-OptiOneClick is an open-source automation and deployment utility. This tool automates and coordinates the configuration of several exceptional open-source libraries, runtimes, and community projects.
+FSRoneclick is an open-source automation and deployment utility. This tool automates and coordinates the configuration of several open-source libraries, runtimes, and community projects.
 
 The credit for the underlying technologies belongs entirely to their original authors:
 
@@ -10,7 +10,7 @@ The credit for the underlying technologies belongs entirely to their original au
 
 ### [DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)
 - **Author**: [Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)
-- **Role**: Inspiration for the application layout, game library scanning approach, and 1-click deployment workflow. OptiOneClick implements an equivalent automated workflow tailored for AMD Radeon GPUs and universal FSR/OptiScaler setups.
+- **Role**: Inspiration for the application layout, game library scanning approach, and 1-click deployment workflow. FSRoneclick implements an equivalent automated workflow tailored for AMD Radeon GPUs and universal FSR/OptiScaler setups.
 - **License**: MIT License
 
 ---

@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 pub const OPTI_PROXY: &str = "dxgi.dll";
 pub const RESHADE_DLL: &str = "ReShade64.dll";
-pub const MANIFEST_NAME: &str = ".optioneclick-manifest";
+pub const MANIFEST_NAME: &str = ".fsroneclick-manifest";
+pub const LEGACY_MANIFEST_NAME: &str = ".optioneclick-manifest";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphicsApi {
@@ -84,23 +85,34 @@ impl GameInfo {
         let dir = exe.parent().unwrap_or(&self.path);
         let mut status = ModStatus::default();
 
-        // 1. Check manifest first (fastest and most accurate for OptiOneClick installations)
+        // 1. Check manifest first (fastest and most accurate for FSRoneclick installations)
         let manifest_path = dir.join(MANIFEST_NAME);
-        if let Ok(content) = fs::read_to_string(&manifest_path) {
-            status.manifest_files = content
-                .lines()
-                .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                .map(|l| l.to_string())
-                .collect();
-            if !status.manifest_files.is_empty() {
-                status.is_optiscaler_installed = true;
-            }
-            for file in &status.manifest_files {
-                if file.contains("ReShade") {
-                    status.is_reshade_installed = true;
+        let legacy_manifest_path = dir.join(LEGACY_MANIFEST_NAME);
+        let manifest_to_read = if manifest_path.is_file() {
+            Some(manifest_path)
+        } else if legacy_manifest_path.is_file() {
+            Some(legacy_manifest_path)
+        } else {
+            None
+        };
+
+        if let Some(mp) = manifest_to_read {
+            if let Ok(content) = fs::read_to_string(&mp) {
+                status.manifest_files = content
+                    .lines()
+                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                    .map(|l| l.to_string())
+                    .collect();
+                if !status.manifest_files.is_empty() {
+                    status.is_optiscaler_installed = true;
                 }
-                if file.starts_with("renodx-") && file.ends_with(".addon64") {
-                    status.installed_renodx_mod = Some(file.clone());
+                for file in &status.manifest_files {
+                    if file.contains("ReShade") {
+                        status.is_reshade_installed = true;
+                    }
+                    if file.starts_with("renodx-") && file.ends_with(".addon64") {
+                        status.installed_renodx_mod = Some(file.clone());
+                    }
                 }
             }
         }

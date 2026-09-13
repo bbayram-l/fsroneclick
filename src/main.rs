@@ -1,9 +1,9 @@
-use optioneclick::game;
-use optioneclick::gpu;
-use optioneclick::gui;
-use optioneclick::installer;
-use optioneclick::net;
-use optioneclick::renodx;
+use fsroneclick::game;
+use fsroneclick::gpu;
+use fsroneclick::gui;
+use fsroneclick::installer;
+use fsroneclick::net;
+use fsroneclick::renodx;
 
 use anyhow::Result;
 use std::env;
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
             run_check(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: optioneclick --check <game_path>");
+            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --check <game_path>");
             std::process::exit(1);
         }
     }
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             run_install_cli(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: optioneclick --install <game_path>");
+            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --install <game_path>");
             std::process::exit(1);
         }
     }
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
             run_uninstall_cli(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: optioneclick --remove <game_path>");
+            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --remove <game_path>");
             std::process::exit(1);
         }
     }
@@ -83,10 +83,10 @@ fn main() -> Result<()> {
 
 fn print_help() {
     println!(
-        r#"OptiOneClick - 1-Click Game Enhancement Suite for AMD Radeon & Universal GPUs
+        r#"FSRoneclick - 1-Click Game Enhancement Suite for AMD Radeon & Universal GPUs
 
 USAGE:
-    optioneclick.exe [OPTIONS] [GAME_PATH]
+    fsroneclick.exe [OPTIONS] [GAME_PATH]
 
 OPTIONS:
     --list-games            Scan and list installed games across Steam, Epic, etc.
@@ -97,13 +97,12 @@ OPTIONS:
     --update-compat         Fetch and cache latest compatibility list from GitHub wiki
     -h, --help              Print this help menu
 
-Without arguments, OptiOneClick launches the interactive graphical interface.
+Without arguments, FSRoneclick launches the interactive graphical interface.
 "#
     );
 }
 
 fn run_check_updates_cli() {
-    println!("Checking for online updates and package versions...");
     let client = match net::create_http_client() {
         Ok(c) => c,
         Err(e) => {
@@ -111,7 +110,7 @@ fn run_check_updates_cli() {
             return;
         }
     };
-    let report = optioneclick::updater::check_all_updates(&client);
+    let report = fsroneclick::updater::check_all_updates(&client);
     println!("\n{:<30} {:<18} {:<18} {:<8}", "Component", "Installed", "Latest Online", "Status");
     println!("{}", "-".repeat(78));
     for c in &report.components {
@@ -131,11 +130,11 @@ fn run_update_compat_cli() {
             return;
         }
     };
-    match optioneclick::updater::fetch_and_cache_compatibility_db(&client) {
+    match fsroneclick::updater::fetch_and_cache_compatibility_db(&client) {
         Ok(db) => {
             println!("SUCCESS: Successfully updated compatibility database!");
             println!("Total games indexed: {}", db.total_entries);
-            println!("Cache location:      {}", optioneclick::updater::cache_file_path().display());
+            println!("Cache location:      {}", fsroneclick::updater::cache_file_path().display());
         }
         Err(e) => {
             eprintln!("Failed to update compatibility database: {e:#}");
@@ -333,14 +332,14 @@ fn run_gui() {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1080.0, 720.0])
             .with_min_inner_size([880.0, 560.0])
-            .with_title("OptiOneClick - AMD RDNA 3 & Universal Game Enhancer"),
+            .with_title("FSRoneclick - AMD FSR & Frame Generation Manager"),
         ..Default::default()
     };
 
     let _ = eframe::run_native(
-        "OptiOneClick",
+        "FSRoneclick",
         native_options,
-        Box::new(|cc| Ok(Box::new(gui::OptiOneClickApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(gui::FSRoneclickApp::new(cc)))),
     );
 }
 

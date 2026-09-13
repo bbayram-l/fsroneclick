@@ -1,13 +1,13 @@
 [package]
-name = "optioneclick"
+name = "fsroneclick"
 version = "0.1.0"
 edition = "2021"
-authors = ["OptiOneClick Contributors"]
-description = "One-click deployment of OptiScaler (FSR 3.1 / 4.1.1 + Frame Generation), ReShade, RenoDX HDR, and Anti-Lag 2 for AMD Radeon & Universal GPUs"
+authors = ["FSRoneclick Contributors"]
+description = "One-click deployment of AMD FSR (3.1 / 4.1.1 Redstone + Frame Generation), OptiScaler, ReShade, RenoDX HDR, and Anti-Lag 2 for AMD Radeon & Universal GPUs"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/bbayram-l/optioneclick"
-keywords = ["fsr", "optiscaler", "amd", "dlss", "upscaling"]
+repository = "https://github.com/bbayram-l/fsroneclick"
+keywords = ["fsr", "fsr4", "amd", "frame-generation", "optiscaler"]
 categories = ["command-line-utilities", "game-development", "gui"]
 
 [dependencies]

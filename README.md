@@ -1,22 +1,22 @@
-# OptiOneClick
+# FSRoneclick
 
 Automated deployment and runtime orchestrator for AMD FSR 3.1 / 4.1.1 "Redstone", Frame Generation, OptiScaler, ReShade, and RenoDX HDR.
 
-[![Release](https://img.shields.io/github/v/release/bbayram-l/optioneclick?style=flat-square)](https://github.com/bbayram-l/optioneclick/releases)
+[![Release](https://img.shields.io/github/v/release/bbayram-l/fsroneclick?style=flat-square)](https://github.com/bbayram-l/fsroneclick/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-informational.svg?style=flat-square)](https://github.com/bbayram-l/optioneclick)
-[![No Runtime Needed](https://img.shields.io/badge/Dependencies-None%20(Standalone%20EXE)-success.svg?style=flat-square)](https://github.com/bbayram-l/optioneclick/releases)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-informational.svg?style=flat-square)](https://github.com/bbayram-l/fsroneclick)
+[![No Runtime Needed](https://img.shields.io/badge/Dependencies-None%20(Standalone%20EXE)-success.svg?style=flat-square)](https://github.com/bbayram-l/fsroneclick/releases)
 
 ---
 
 ## Download & Quick Start (No Rust Required)
 
-OptiOneClick is distributed as a **fully self-contained, pre-compiled Windows executable**. You do **not** need Rust, Cargo, Python, Visual Studio, or any development tools installed.
+FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows executable**. You do **not** need Rust, Cargo, Python, Visual Studio, or any development tools installed.
 
-1. Go to the [**Latest GitHub Release**](https://github.com/bbayram-l/optioneclick/releases) page.
-2. Download **`optioneclick-windows-x64.zip`** (or download `optioneclick.exe` directly).
+1. Go to the [**Latest GitHub Release**](https://github.com/bbayram-l/fsroneclick/releases) page.
+2. Download **`fsroneclick-windows-x64.zip`** (or download `fsroneclick.exe` directly).
 3. Extract the folder anywhere on your computer (e.g. `Downloads` or `Desktop`).
-4. Double-click **`optioneclick.exe`** to launch the application.
+4. Double-click **`fsroneclick.exe`** to launch the application.
 
 ---
 
@@ -24,15 +24,15 @@ OptiOneClick is distributed as a **fully self-contained, pre-compiled Windows ex
 
 This project was inspired by **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)** by **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)**.
 
-While *DLSS5oneclick* focuses on automating the installation of the DLSS 5 Feeder / ReShade add-on pipeline for NVIDIA setups, **OptiOneClick** adopts a similar automated GUI and CLI workflow tailored for **[OptiScaler](https://github.com/optiscaler/OptiScaler)**, **AMD FSR 3.1 / 4.1.1 "Redstone"**, Frame Generation, and AMD Radeon (RDNA 3 / RDNA 2) as well as universal GPU configurations.
+While *DLSS5oneclick* focuses on automating the installation of the DLSS 5 Feeder / ReShade add-on pipeline for NVIDIA setups, **FSRoneclick** adopts a similar automated GUI and CLI workflow tailored for **[OptiScaler](https://github.com/optiscaler/OptiScaler)**, **AMD FSR 3.1 / 4.1.1 "Redstone"**, Frame Generation, and AMD Radeon (RDNA 3 / RDNA 2) as well as universal GPU configurations.
 
 ---
 
 ## Overview
 
-**OptiOneClick** automates the installation, configuration, and maintenance of AMD FidelityFX Super Resolution (FSR 3.1 and FSR 4.1.1 "Redstone"), Frame Generation, ReShade, and RenoDX HDR for PC games.
+**FSRoneclick** automates the installation, configuration, and maintenance of AMD FidelityFX Super Resolution (FSR 3.1 and FSR 4.1.1 "Redstone"), Frame Generation, ReShade, and RenoDX HDR for PC games.
 
-PC games often lock Frame Generation or advanced upscalers behind proprietary hardware checks (e.g. requiring RTX 40/50 series GPUs). OptiOneClick bypasses these artificial restrictions:
+PC games often lock Frame Generation or advanced upscalers behind proprietary hardware checks (e.g. requiring RTX 40/50 series GPUs). FSRoneclick bypasses these artificial restrictions:
 - Automatically detects installed games across all Steam drives, custom paths, and standalone directories (`D:\Games`, `C:\Games`, Epic Games, GOG).
 - Automatically pairs the game executable with the optimal proxy hook (`dxgi.dll`, `version.dll`, or `winmm.dll`).
 - Injects **OptiPatcher** to neutralize in-memory vendor lock signatures, preventing crashes when DLSS Frame Generation is enabled.
@@ -67,13 +67,13 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 - **In-App Updater**: Synchronizes latest compatibility tables and checks for upstream component releases directly from within the UI or CLI.
 
 ### Safe & Non-Destructive
-- **Manifest-Driven Clean Rollback**: Tracks every placed file in `.optioneclick_manifest.json`. Uninstallation cleanly deletes only injected files, leaving original game files untouched.
+- **Manifest-Driven Clean Rollback**: Tracks every placed file in `.fsroneclick-manifest`. Uninstallation cleanly deletes only injected files, leaving original game files untouched.
 
 ---
 
 ## In-Game Usage
 
-1. Open **OptiOneClick** and select your game from the list.
+1. Open **FSRoneclick** and select your game from the list.
 2. Verify the recommended configuration (GPU architecture, hook type, and add-ons) and click **Install Enhancements**.
 3. Launch the game through your normal launcher (Steam, Epic, or game executable).
 4. In the game's **Video / Display Settings**:
@@ -87,23 +87,23 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 
 ## Command Line Interface (CLI)
 
-OptiOneClick can also be executed headlessly for scripting or automation:
+FSRoneclick can also be executed headlessly for scripting or automation:
 
 ```bash
 # List all detected games and their installation status
-optioneclick.exe --list
+fsroneclick.exe --list-games
 
-# Install OptiScaler and enhancements for a specific game
-optioneclick.exe --install "Far Cry 5"
+# Install FSR and enhancements for a specific game directory
+fsroneclick.exe --install "D:\Games\Far Cry 5\bin"
 
-# Uninstall injected files and restore clean state
-optioneclick.exe --uninstall "Far Cry 5"
+# Uninstall injected files and restore stock game state
+fsroneclick.exe --remove "D:\Games\Far Cry 5\bin"
 
-# Check for updates to OptiScaler, ReShade, RenoDX, and OptiOneClick
-optioneclick.exe --check-updates
+# Check for updates to OptiScaler, ReShade, RenoDX, and FSRoneclick
+fsroneclick.exe --check-updates
 
 # Synchronize local compatibility database with upstream community sources
-optioneclick.exe --update-compat
+fsroneclick.exe --update-compat
 ```
 
 ---
@@ -119,8 +119,8 @@ optioneclick.exe --update-compat
 ### Build Steps
 ```bash
 # Clone repository
-git clone https://github.com/bbayram-l/optioneclick.git
-cd optioneclick
+git clone https://github.com/bbayram-l/fsroneclick.git
+cd fsroneclick
 
 # Run unit tests (11 automated tests covering INI generation, RDNA 3 tuning, parser, and manifest rollback)
 cargo test
@@ -129,7 +129,7 @@ cargo test
 cargo build --release
 ```
 
-The standalone executable will be generated at `target/release/optioneclick.exe`.
+The standalone executable will be generated at `target/release/fsroneclick.exe`.
 
 ---
 
@@ -137,9 +137,9 @@ The standalone executable will be generated at `target/release/optioneclick.exe`
 
 This tool automates, coordinates, and configures the work of several brilliant open-source projects and researchers. The credit belongs to:
 
-- **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)** — **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)**, the original project that inspired this tool's existence, user interface structure, and one-click automation workflow.
+- **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)** — **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)**, for the inspiring desktop UI concept, library detection layout, and one-click automation workflow.
 - **[cdozdil](https://github.com/cdozdil)** and the **[OptiScaler team](https://github.com/optiscaler/OptiScaler)** — **[OptiScaler](https://github.com/optiscaler/OptiScaler)** (GPL-3.0 / MIT components), the middleware translating DLSS and XeSS API calls into AMD FSR 3.1, FSR 4.1.1 "Redstone", and Frame Generation.
-- **[Advanced Micro Devices (AMD)](https://www.amd.com)** — **[AMD FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** (MIT License), providing world-class temporal upscaling, frame generation, and RDNA 3 WMMA INT8 tensor acceleration.
+- **[Advanced Micro Devices (AMD)](https://www.amd.com)** — **[AMD FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** (MIT License), providing temporal upscaling, frame generation, and RDNA 3 WMMA INT8 tensor acceleration.
 - **[crosire](https://github.com/crosire)** — **[ReShade](https://reshade.me)** (BSD 3-Clause) and **[reshade-shaders](https://github.com/crosire/reshade-shaders)**, the injection framework and shader pipeline.
 - **[clshortfuse](https://github.com/clshortfuse)** and the RenoDX community — **[RenoDX](https://github.com/clshortfuse/renodx)**, providing native HDR reconstruction and tonemapping add-ons.
 - **[Afzaal (Kaidō)](https://github.com/umar-afzaal)** — **[LumeniteFX](https://github.com/umar-afzaal/LumeniteFX)**, the motion-vector provider and tonemapping shader suite.
@@ -148,6 +148,12 @@ This tool automates, coordinates, and configures the work of several brilliant o
 - **[JetBrains](https://github.com/JetBrains/JetBrainsMono)** — **JetBrains Mono** font (SIL Open Font License 1.1).
 
 For individual license texts and component breakdowns, please refer to [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+---
+
+## Trademark Notice
+
+AMD, Radeon, FidelityFX, and FSR are trademarks of Advanced Micro Devices, Inc. This project is an independent open-source utility and is not affiliated with, endorsed by, or sponsored by Advanced Micro Devices, Inc.
 
 ---
 

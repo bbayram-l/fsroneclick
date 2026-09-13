@@ -1,4 +1,4 @@
-//! Native egui graphical interface for OptiOneClick.
+//! Native egui graphical interface for FSRoneclick.
 
 use crate::game::{self, GameInfo};
 use crate::gpu::{self, GpuInfo};
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
-pub struct OptiOneClickApp {
+pub struct FSRoneclickApp {
     client: Client,
     gpu: Option<GpuInfo>,
     games: Vec<GameInfo>,
@@ -49,7 +49,7 @@ enum TaskMessage {
     CompatDbUpdated(Result<usize, String>),
 }
 
-impl OptiOneClickApp {
+impl FSRoneclickApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let client = net::create_http_client().unwrap_or_else(|_| Client::new());
         let gpu = gpu::detect_gpu();
@@ -281,7 +281,7 @@ impl OptiOneClickApp {
     }
 }
 
-impl eframe::App for OptiOneClickApp {
+impl eframe::App for FSRoneclickApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_task();
 
@@ -299,8 +299,8 @@ impl eframe::App for OptiOneClickApp {
         egui::TopBottomPanel::top("header_panel").show(ctx, |ui| {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.heading(RichText::new("OptiOneClick").size(22.0).strong().color(Color32::from_rgb(70, 180, 255)));
-                ui.label(RichText::new("· AMD RDNA 3 & Universal Game Enhancer").size(14.0).color(Color32::GRAY));
+                ui.heading(RichText::new("FSRoneclick").size(22.0).strong().color(Color32::from_rgb(70, 180, 255)));
+                ui.label(RichText::new("· AMD FSR & Frame Generation Manager").size(14.0).color(Color32::GRAY));
 
                 ui.add_space(16.0);
                 if ui.button(RichText::new("Documentation").size(12.0).strong()).clicked() {
@@ -758,7 +758,7 @@ impl eframe::App for OptiOneClickApp {
     }
 }
 
-impl OptiOneClickApp {
+impl FSRoneclickApp {
     fn render_guide_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_guide_window;
         egui::Window::new("Documentation & Tuning Guide")
@@ -790,7 +790,7 @@ impl OptiOneClickApp {
                             ui.label("• Select a detected game from the left sidebar.\n• For custom or non-store installations, open 'Add Custom Game Directory' and specify the binary path (e.g. D:\\Games\\Far Cry 5\\bin).");
                             ui.add_space(6.0);
                             ui.label(RichText::new("2. Review Engine & System Analysis").strong());
-                            ui.label("• Verify the graphics API (DirectX 11, DirectX 12, or Vulkan).\n• Review OptiScaler Community Compatibility profile and AMD FSR Redstone tier.\n• OptiOneClick automatically configures recommended engine flags (AutoExposure, Non-Linear Color Space, Custom Proxy Hooks) matching verified upstream workarounds.");
+                            ui.label("• Verify the graphics API (DirectX 11, DirectX 12, or Vulkan).\n• Review OptiScaler Community Compatibility profile and AMD FSR Redstone tier.\n• FSRoneclick automatically configures recommended engine flags (AutoExposure, Non-Linear Color Space, Custom Proxy Hooks) matching verified upstream workarounds.");
                             ui.add_space(6.0);
                             ui.label(RichText::new("3. Configure Enhancement Options").strong());
                             ui.label("• OptiScaler: Intercepts DLSS and XeSS API calls, routing them into AMD FSR 3.1.\n• FSR Frame Generation: Replaces DLSS-G calls with AMD FSR 3 frame generation.\n• FSR 4.1.1 INT8: Employs RDNA 3 WMMA tensor instructions for machine-learning super-resolution.\n• ReShade + RenoDX: Loads HDR10/scRGB color grading and Contrast Adaptive Sharpening (CAS).");
@@ -817,7 +817,7 @@ impl OptiOneClickApp {
                             ui.label("• For Unreal Engine DX11 games experiencing motion vector jitter, add 'r.NGX.DLSS.DilateMotionVectors=0' to Engine.ini under '[SystemSettings]'.");
                             ui.add_space(6.0);
                             ui.label(RichText::new("Alternative Proxy Hook Types").strong().color(Color32::LIGHT_BLUE));
-                            ui.label("• Most titles hook cleanly through dxgi.dll. For games with custom DXGI wrappers, OptiOneClick can deploy as winmm.dll, d3d12.dll, or version.dll.");
+                            ui.label("• Most titles hook cleanly through dxgi.dll. For games with custom DXGI wrappers, FSRoneclick can deploy as winmm.dll, d3d12.dll, or version.dll.");
                             ui.add_space(6.0);
                             ui.label(RichText::new("Latency Reduction: Reflex to Anti-Lag 2").strong().color(Color32::LIGHT_YELLOW));
                             ui.label("• FakeNVAPI dynamically routes NVIDIA Reflex synchronization into AMD Anti-Lag 2 for low input latency.");
@@ -845,15 +845,15 @@ impl OptiOneClickApp {
                             ui.heading("Anti-Cheat Safety Guidelines");
                             ui.add_space(6.0);
                             ui.label(RichText::new("Single-Player & Offline Games:").strong().color(Color32::LIGHT_GREEN));
-                            ui.label("• OptiOneClick is completely safe for single-player campaigns and offline play.");
+                            ui.label("• FSRoneclick is completely safe for single-player campaigns and offline play.");
                             ui.add_space(6.0);
                             ui.label(RichText::new("Multiplayer / Kernel Anti-Cheat Protected Titles:").strong().color(Color32::from_rgb(255, 90, 90)));
-                            ui.label("• Titles protected by kernel-level anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) will block DLL proxy hooks (such as dxgi.dll) and may flag accounts.\n• When OptiOneClick detects an active anti-cheat system, it flags a warning badge in the System Analysis panel.\n• Always launch games in offline or single-player mode when using DLL mod proxies.");
+                            ui.label("• Titles protected by kernel-level anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) will block DLL proxy hooks (such as dxgi.dll) and may flag accounts.\n• When FSRoneclick detects an active anti-cheat system, it flags a warning badge in the System Analysis panel.\n• Always launch games in offline or single-player mode when using DLL mod proxies.");
                         }
                         4 => {
                             ui.heading("Credits & Third-Party Licenses");
                             ui.add_space(6.0);
-                            ui.label("OptiOneClick automates, coordinates, and stages other creators' exceptional open-source work.");
+                            ui.label("FSRoneclick automates, coordinates, and stages other creators' exceptional open-source work.");
                             ui.add_space(8.0);
 
                             ui.group(|ui| {

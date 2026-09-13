@@ -345,7 +345,7 @@ pub fn install(
     // 6. Write Manifest for 1-Click Clean Rollback
     progress(0.95, "Recording uninstaller manifest");
     let manifest_path = target_dir.join(MANIFEST_NAME);
-    let mut manifest_content = String::from("# OptiOneClick Installation Manifest\n");
+    let mut manifest_content = String::from("# FSRoneclick Installation Manifest\n");
     for file in &placed_files {
         manifest_content.push_str(file);
         manifest_content.push('\n');
@@ -364,12 +364,17 @@ pub fn uninstall(game: &GameInfo) -> Result<Vec<String>> {
     };
     let target_dir = exe_path.parent().unwrap_or(&game.path);
     let manifest_path = target_dir.join(MANIFEST_NAME);
+    let legacy_manifest_path = target_dir.join(crate::game::LEGACY_MANIFEST_NAME);
 
-    if !manifest_path.is_file() {
+    let active_manifest = if manifest_path.is_file() {
+        manifest_path
+    } else if legacy_manifest_path.is_file() {
+        legacy_manifest_path
+    } else {
         return Err(anyhow!("No installation manifest found in game folder"));
-    }
+    };
 
-    let content = fs::read_to_string(&manifest_path)?;
+    let content = fs::read_to_string(&active_manifest)?;
     let mut removed = Vec::new();
 
     for line in content.lines() {
@@ -388,8 +393,8 @@ pub fn uninstall(game: &GameInfo) -> Result<Vec<String>> {
     }
 
     // Remove manifest itself
-    let _ = fs::remove_file(&manifest_path);
-    removed.push(MANIFEST_NAME.to_string());
+    let _ = fs::remove_file(&active_manifest);
+    removed.push(active_manifest.file_name().unwrap_or_default().to_string_lossy().to_string());
 
     // Clean up empty directories if present
     let _ = fs::remove_dir(target_dir.join("plugins"));
@@ -419,7 +424,7 @@ pub fn generate_optiscaler_ini(
     let load_asi = if compat.optipatcher_supported { "true" } else { "false" };
 
     format!(
-        r#"; OptiOneClick Configuration - Optimized for AMD Radeon & Universal GPUs
+        r#"; FSRoneclick Configuration - Optimized for AMD Radeon & Universal GPUs
 [General]
 LogLevel = 1
 LogToConsole = false

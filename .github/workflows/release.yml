@@ -30,29 +30,29 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { 'latest' }
-          $distDir = "dist/optioneclick"
+          $distDir = "dist/fsroneclick"
           New-Item -ItemType Directory -Force -Path $distDir | Out-Null
           
-          Copy-Item "target/release/optioneclick.exe" -Destination "$distDir/optioneclick.exe"
+          Copy-Item "target/release/fsroneclick.exe" -Destination "$distDir/fsroneclick.exe"
           Copy-Item "README.md" -Destination "$distDir/README.md"
           Copy-Item "LICENSE" -Destination "$distDir/LICENSE"
           Copy-Item "THIRD_PARTY_LICENSES.md" -Destination "$distDir/THIRD_PARTY_LICENSES.md"
 
-          $zipName = "optioneclick-$tag-windows-x64.zip"
+          $zipName = "fsroneclick-$tag-windows-x64.zip"
           Compress-Archive -Path "$distDir/*" -DestinationPath $zipName -Force
 
           $hash = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash.ToLower()
           "$hash  $zipName" | Out-File -Encoding ascii -FilePath "$zipName.sha256"
 
           # Direct standalone executable asset
-          Copy-Item "target/release/optioneclick.exe" -Destination "optioneclick.exe"
-          $exeHash = (Get-FileHash -Path "optioneclick.exe" -Algorithm SHA256).Hash.ToLower()
-          "$exeHash  optioneclick.exe" | Out-File -Encoding ascii -FilePath "optioneclick.exe.sha256"
+          Copy-Item "target/release/fsroneclick.exe" -Destination "fsroneclick.exe"
+          $exeHash = (Get-FileHash -Path "fsroneclick.exe" -Algorithm SHA256).Hash.ToLower()
+          "$exeHash  fsroneclick.exe" | Out-File -Encoding ascii -FilePath "fsroneclick.exe.sha256"
 
           echo "ZIP_PATH=$zipName" >> $env:GITHUB_ENV
           echo "SHA_PATH=$zipName.sha256" >> $env:GITHUB_ENV
-          echo "EXE_PATH=optioneclick.exe" >> $env:GITHUB_ENV
-          echo "EXE_SHA_PATH=optioneclick.exe.sha256" >> $env:GITHUB_ENV
+          echo "EXE_PATH=fsroneclick.exe" >> $env:GITHUB_ENV
+          echo "EXE_SHA_PATH=fsroneclick.exe.sha256" >> $env:GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

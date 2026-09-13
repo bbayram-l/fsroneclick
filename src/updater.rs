@@ -287,9 +287,9 @@ pub fn check_all_updates(client: &Client) -> UpdateCheckReport {
         details: "Community studio-grade HDR10/scRGB enhancement mods".to_string(),
     });
 
-    // 6. OptiOneClick Application
+    // 6. FSRoneclick Application
     components.push(ComponentStatus {
-        name: "OptiOneClick App".to_string(),
+        name: "FSRoneclick App".to_string(),
         installed_version: CURRENT_APP_VERSION.to_string(),
         latest_version: Some(CURRENT_APP_VERSION.to_string()),
         up_to_date: true,

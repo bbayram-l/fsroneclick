@@ -10,7 +10,7 @@ pub type ProgressCallback<'a> = Box<dyn FnMut(f32, &str) + 'a>;
 
 pub fn cache_dir() -> PathBuf {
     if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        let p = PathBuf::from(local).join("OptiOneClick").join("cache");
+        let p = PathBuf::from(local).join("FSRoneclick").join("cache");
         let _ = fs::create_dir_all(&p);
         p
     } else {
@@ -22,7 +22,7 @@ pub fn cache_dir() -> PathBuf {
 
 pub fn create_http_client() -> Result<Client> {
     Client::builder()
-        .user_agent("OptiOneClick-Installer/1.0")
+        .user_agent("FSRoneclick-Installer/1.0")
         .build()
         .context("Failed to build HTTP client")
 }
