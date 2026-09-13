@@ -1,0 +1,25 @@
+[package]
+name = "optioneclick"
+version = "0.1.0"
+edition = "2021"
+authors = ["OptiOneClick Contributors"]
+description = "One-click setup of OptiScaler (FSR 3.1/4.1.1 + Frame Gen), ReShade, RenoDX HDR, and FidelityFX CAS/LumeniteFX for AMD Radeon & Universal GPUs"
+
+[dependencies]
+eframe = "0.29"
+egui = "0.29"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "default-tls", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+sevenz-rust = "0.6"
+windows-sys = { version = "0.59", features = ["Win32_System_Registry"] }
+regex = "1.10"
+anyhow = "1.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

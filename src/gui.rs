@@ -1,0 +1,919 @@
+//! Native egui graphical interface for OptiOneClick.
+
+use crate::game::{self, GameInfo};
+use crate::gpu::{self, GpuInfo};
+use crate::installer::{self, InstallConfig};
+use crate::net;
+use crate::renodx::{self, RenoDxMod};
+use eframe::egui::{self, Color32, RichText, Rounding, Stroke, Vec2};
+use reqwest::blocking::Client;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
+
+pub struct OptiOneClickApp {
+    client: Client,
+    gpu: Option<GpuInfo>,
+    games: Vec<GameInfo>,
+    mod_status_cache: Vec<crate::game::ModStatus>,
+    filtered_games: Vec<usize>,
+    selected_game_idx: Option<usize>,
+    renodx_catalog: HashMap<String, RenoDxMod>,
+    search_query: String,
+    config: InstallConfig,
+    custom_path_input: String,
+
+    // Background task channel
+    task_rx: Option<Receiver<TaskMessage>>,
+    task_running: bool,
+    progress_val: f32,
+    progress_msg: String,
+    log_messages: Vec<String>,
+
+    // Guide & Updates state
+    show_guide_window: bool,
+    guide_tab: usize,
+    show_updates_window: bool,
+    update_report: Option<crate::updater::UpdateCheckReport>,
+    is_checking_updates: bool,
+    is_updating_compat_db: bool,
+    update_status_text: Option<String>,
+}
+
+enum TaskMessage {
+    Progress(f32, String),
+    Log(String),
+    Done(Result<String, String>),
+    UpdateReport(crate::updater::UpdateCheckReport),
+    CompatDbUpdated(Result<usize, String>),
+}
+
+impl OptiOneClickApp {
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let client = net::create_http_client().unwrap_or_else(|_| Client::new());
+        let gpu = gpu::detect_gpu();
+
+        // Load local cached compatibility database if present on startup
+        let _ = crate::updater::load_cached_compatibility_db();
+
+        let games = game::scan_all_games();
+        let mod_status_cache = games.iter().map(|g| g.check_mod_status()).collect();
+        let renodx_catalog = renodx::fetch_mods_catalog(&client);
+
+        let mut app = Self {
+            client,
+            gpu,
+            games,
+            mod_status_cache,
+            filtered_games: Vec::new(),
+            selected_game_idx: None,
+            renodx_catalog,
+            search_query: String::new(),
+            config: InstallConfig::default(),
+            custom_path_input: String::new(),
+            task_rx: None,
+            task_running: false,
+            progress_val: 0.0,
+            progress_msg: "Ready".to_string(),
+            log_messages: Vec::new(),
+            show_guide_window: false,
+            guide_tab: 0,
+            show_updates_window: false,
+            update_report: None,
+            is_checking_updates: false,
+            is_updating_compat_db: false,
+            update_status_text: None,
+        };
+
+        // If RDNA 3 GPU is present, ensure FSR 4 INT8 is enabled by default
+        if let Some(ref g) = app.gpu {
+            if g.arch.supports_fsr4_int8() {
+                app.config.enable_fsr4_int8 = true;
+            }
+        }
+
+        app.update_filter();
+        if !app.filtered_games.is_empty() {
+            app.selected_game_idx = Some(app.filtered_games[0]);
+        }
+
+        app
+    }
+
+    fn update_filter(&mut self) {
+        let q = self.search_query.trim().to_lowercase();
+        self.filtered_games = self
+            .games
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| q.is_empty() || g.title.to_lowercase().contains(&q))
+            .map(|(idx, _)| idx)
+            .collect();
+    }
+
+    fn refresh_games(&mut self) {
+        self.games = game::scan_all_games();
+        self.mod_status_cache = self.games.iter().map(|g| g.check_mod_status()).collect();
+        self.update_filter();
+    }
+
+    fn run_install(&mut self, game_idx: usize) {
+        let game = self.games[game_idx].clone();
+        let client = self.client.clone();
+        let config = self.config.clone();
+        let gpu_arch = self.gpu.as_ref().map(|g| g.arch.clone()).unwrap_or(gpu::Arch::Unknown);
+        let catalog = self.renodx_catalog.clone();
+
+        let (tx, rx): (Sender<TaskMessage>, Receiver<TaskMessage>) = channel();
+        self.task_rx = Some(rx);
+        self.task_running = true;
+        self.progress_val = 0.0;
+        self.progress_msg = "Starting install...".to_string();
+
+        thread::spawn(move || {
+            let tx_clone = tx.clone();
+            let progress_fn = Box::new(move |pct: f32, msg: &str| {
+                let _ = tx_clone.send(TaskMessage::Progress(pct, msg.to_string()));
+            });
+
+            match installer::install(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
+                Ok(files) => {
+                    let _ = tx.send(TaskMessage::Log(format!(
+                        "Installed {} files successfully:\n{}",
+                        files.len(),
+                        files.join("\n")
+                    )));
+                    let _ = tx.send(TaskMessage::Done(Ok(format!(
+                        "Installed {} components for {}",
+                        files.len(),
+                        game.title
+                    ))));
+                }
+                Err(e) => {
+                    let _ = tx.send(TaskMessage::Done(Err(format!("Installation failed: {e:#}"))));
+                }
+            }
+        });
+    }
+
+    fn run_uninstall(&mut self, game_idx: usize) {
+        let game = self.games[game_idx].clone();
+        let (tx, rx): (Sender<TaskMessage>, Receiver<TaskMessage>) = channel();
+        self.task_rx = Some(rx);
+        self.task_running = true;
+        self.progress_val = 0.5;
+        self.progress_msg = "Rolling back enhancements...".to_string();
+
+        thread::spawn(move || {
+            match installer::uninstall(&game) {
+                Ok(files) => {
+                    let _ = tx.send(TaskMessage::Log(format!(
+                        "Cleanly removed {} files:\n{}",
+                        files.len(),
+                        files.join("\n")
+                    )));
+                    let _ = tx.send(TaskMessage::Done(Ok(format!(
+                        "Restored {} to stock cleanly",
+                        game.title
+                    ))));
+                }
+                Err(e) => {
+                    let _ = tx.send(TaskMessage::Done(Err(format!("Rollback failed: {e:#}"))));
+                }
+            }
+        });
+    }
+
+    fn run_check_updates(&mut self) {
+        let client = self.client.clone();
+        let (tx, rx): (Sender<TaskMessage>, Receiver<TaskMessage>) = channel();
+        self.task_rx = Some(rx);
+        self.is_checking_updates = true;
+        self.update_status_text = Some("Querying GitHub for latest releases...".to_string());
+
+        thread::spawn(move || {
+            let report = crate::updater::check_all_updates(&client);
+            let _ = tx.send(TaskMessage::UpdateReport(report));
+        });
+    }
+
+    fn run_update_compat_db(&mut self) {
+        let client = self.client.clone();
+        let (tx, rx): (Sender<TaskMessage>, Receiver<TaskMessage>) = channel();
+        self.task_rx = Some(rx);
+        self.is_updating_compat_db = true;
+        self.update_status_text = Some("Downloading latest OptiScaler compatibility wiki from GitHub...".to_string());
+
+        thread::spawn(move || {
+            match crate::updater::fetch_and_cache_compatibility_db(&client) {
+                Ok(db) => {
+                    let _ = tx.send(TaskMessage::CompatDbUpdated(Ok(db.total_entries)));
+                }
+                Err(e) => {
+                    let _ = tx.send(TaskMessage::CompatDbUpdated(Err(e.to_string())));
+                }
+            }
+        });
+    }
+
+    fn poll_task(&mut self) {
+        let mut messages = Vec::new();
+        if let Some(ref rx) = self.task_rx {
+            while let Ok(msg) = rx.try_recv() {
+                messages.push(msg);
+            }
+        }
+
+        let mut needs_refresh = false;
+
+        for msg in messages {
+            match msg {
+                TaskMessage::Progress(pct, s) => {
+                    self.progress_val = pct;
+                    self.progress_msg = s;
+                }
+                TaskMessage::Log(s) => {
+                    self.log_messages.push(s);
+                }
+                TaskMessage::Done(res) => {
+                    self.task_running = false;
+                    match res {
+                        Ok(msg) => {
+                            self.progress_val = 1.0;
+                            self.progress_msg = msg.clone();
+                            self.log_messages.push(format!("SUCCESS: {msg}"));
+                        }
+                        Err(err) => {
+                            self.progress_msg = err.clone();
+                            self.log_messages.push(format!("ERROR: {err}"));
+                        }
+                    }
+                    if let Some(idx) = self.selected_game_idx {
+                        if idx < self.mod_status_cache.len() {
+                            self.mod_status_cache[idx] = self.games[idx].check_mod_status();
+                        }
+                    }
+                }
+                TaskMessage::UpdateReport(report) => {
+                    self.is_checking_updates = false;
+                    self.update_status_text = Some("All component checks completed.".to_string());
+                    self.update_report = Some(report);
+                }
+                TaskMessage::CompatDbUpdated(res) => {
+                    self.is_updating_compat_db = false;
+                    match res {
+                        Ok(count) => {
+                            self.update_status_text = Some(format!("Successfully updated & cached {count} games from live wiki!"));
+                            needs_refresh = true;
+                        }
+                        Err(e) => {
+                            self.update_status_text = Some(format!("Wiki update failed: {e}"));
+                        }
+                    }
+                }
+            }
+        }
+
+        if needs_refresh {
+            self.refresh_games();
+        }
+    }
+}
+
+impl eframe::App for OptiOneClickApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_task();
+
+        // Dark modern gaming style
+        let mut visuals = egui::Visuals::dark();
+        visuals.override_text_color = Some(Color32::from_rgb(225, 230, 240));
+        visuals.panel_fill = Color32::from_rgb(18, 20, 26);
+        visuals.window_fill = Color32::from_rgb(24, 27, 36);
+        visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(28, 32, 42);
+        visuals.widgets.inactive.bg_fill = Color32::from_rgb(34, 40, 54);
+        visuals.widgets.hovered.bg_fill = Color32::from_rgb(45, 54, 74);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(60, 72, 100);
+        ctx.set_visuals(visuals);
+
+        egui::TopBottomPanel::top("header_panel").show(ctx, |ui| {
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.heading(RichText::new("OptiOneClick").size(22.0).strong().color(Color32::from_rgb(70, 180, 255)));
+                ui.label(RichText::new("· AMD RDNA 3 & Universal Game Enhancer").size(14.0).color(Color32::GRAY));
+
+                ui.add_space(16.0);
+                if ui.button(RichText::new("📖 Guide & Tips").size(12.0).strong()).clicked() {
+                    self.show_guide_window = !self.show_guide_window;
+                }
+                if ui.button(RichText::new("🔄 Updates & Libraries").size(12.0).strong()).clicked() {
+                    self.show_updates_window = !self.show_updates_window;
+                    if self.update_report.is_none() && !self.is_checking_updates {
+                        self.run_check_updates();
+                    }
+                }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(ref gpu) = self.gpu {
+                        let badge_color = if matches!(gpu.arch, gpu::Arch::Rdna3) {
+                            Color32::from_rgb(255, 60, 80) // AMD Red
+                        } else {
+                            Color32::from_rgb(70, 150, 230)
+                        };
+                        ui.label(RichText::new(&gpu.name).strong().color(badge_color));
+                        ui.label(RichText::new("GPU:").color(Color32::GRAY));
+                    } else {
+                        ui.label(RichText::new("GPU: Universal Direct3D / Vulkan").color(Color32::GRAY));
+                    }
+                });
+            });
+
+            if let Some(ref gpu) = self.gpu {
+                ui.add_space(4.0);
+                ui.label(RichText::new(format!("Hardware Status: {}", gpu.arch.label())).size(12.0).color(Color32::from_rgb(140, 200, 140)));
+            }
+            ui.add_space(8.0);
+        });
+
+        // Bottom status & progress bar
+        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if self.task_running {
+                    ui.spinner();
+                }
+                ui.label(RichText::new(&self.progress_msg).size(13.0));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if self.task_running {
+                        ui.add(egui::ProgressBar::new(self.progress_val).desired_width(200.0).show_percentage());
+                    }
+                });
+            });
+            ui.add_space(6.0);
+        });
+
+        // Left sidebar: Games List & Search
+        egui::SidePanel::left("games_sidebar").min_width(320.0).max_width(360.0).show(ctx, |ui| {
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let search_resp = ui.add(
+                    egui::TextEdit::singleline(&mut self.search_query)
+                        .hint_text("🔍 Search games...")
+                        .desired_width(220.0),
+                );
+                if search_resp.changed() {
+                    self.update_filter();
+                }
+
+                if ui.button("🔄 Rescan").clicked() {
+                    self.refresh_games();
+                }
+            });
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Custom Folder Adder
+            ui.collapsing("➕ Add Custom Game Folder", |ui| {
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.custom_path_input);
+                    if ui.button("Add").clicked() && !self.custom_path_input.trim().is_empty() {
+                        let p = PathBuf::from(self.custom_path_input.trim());
+                        if let Some(g) = game::from_custom_path(&p) {
+                            let status = g.check_mod_status();
+                            self.games.insert(0, g);
+                            self.mod_status_cache.insert(0, status);
+                            self.custom_path_input.clear();
+                            self.update_filter();
+                            self.selected_game_idx = Some(0);
+                        }
+                    }
+                });
+            });
+
+            ui.add_space(6.0);
+            ui.label(RichText::new(format!("Installed Games ({})", self.filtered_games.len())).small().color(Color32::GRAY));
+            ui.add_space(4.0);
+
+            egui::ScrollArea::vertical()
+                .id_salt("games_sidebar_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for &idx in &self.filtered_games {
+                        let g = &self.games[idx];
+                        let is_selected = self.selected_game_idx == Some(idx);
+                        let mod_status = if idx < self.mod_status_cache.len() {
+                            &self.mod_status_cache[idx]
+                        } else {
+                            continue;
+                        };
+
+                        let btn_resp = ui.selectable_label(
+                            is_selected,
+                            format!(
+                                "{} [{}]",
+                                g.title,
+                                g.store.label()
+                            ),
+                        );
+
+                        if btn_resp.clicked() {
+                            self.selected_game_idx = Some(idx);
+                        }
+
+                        // Small indicator badge under each item
+                        ui.horizontal(|ui| {
+                            ui.add_space(16.0);
+                            ui.label(RichText::new(g.api.label()).size(10.0).color(Color32::from_rgb(100, 160, 220)));
+
+                            if g.compat.fsr_redstone_supported {
+                                ui.label(RichText::new("● Redstone").size(10.0).color(Color32::from_rgb(255, 120, 120)));
+                            } else if g.compat.opti_status.is_some() {
+                                ui.label(RichText::new("● Opti").size(10.0).color(Color32::from_rgb(100, 220, 150)));
+                            }
+
+                            if mod_status.is_optiscaler_installed {
+                                ui.label(RichText::new("● Modded").size(10.0).color(Color32::from_rgb(80, 220, 120)));
+                            }
+                            if mod_status.installed_renodx_mod.is_some() {
+                                ui.label(RichText::new("● HDR").size(10.0).color(Color32::from_rgb(255, 180, 50)));
+                            }
+                        });
+                        ui.add_space(4.0);
+                    }
+                });
+        });
+
+        // Main Center Panel: Selected Game Detail & Setup Actions
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let Some(idx) = self.selected_game_idx else {
+                ui.centered_and_justified(|ui| {
+                    ui.heading("Select a game from the sidebar to inspect and enhance");
+                });
+                return;
+            };
+
+            let game = self.games[idx].clone();
+            let mod_status = if idx < self.mod_status_cache.len() {
+                self.mod_status_cache[idx].clone()
+            } else {
+                game.check_mod_status()
+            };
+            let renodx_mod = renodx::match_game(&game.title, &self.renodx_catalog).cloned();
+
+            egui::ScrollArea::vertical()
+                .id_salt("main_center_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.heading(RichText::new(&game.title).size(24.0).strong());
+                        ui.label(
+                            RichText::new(format!("[{}]", game.store.label()))
+                                .size(14.0)
+                                .color(Color32::LIGHT_BLUE),
+                        );
+                    });
+
+            ui.label(
+                RichText::new(format!("Location: {}", game.path.display()))
+                    .size(11.0)
+                    .color(Color32::GRAY),
+            );
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(10.0);
+
+            // Status Grid
+            ui.group(|ui| {
+                ui.label(RichText::new("Engine & System Analysis").strong().size(15.0));
+                ui.add_space(6.0);
+                egui::Grid::new("game_info_grid").num_columns(2).spacing([40.0, 8.0]).show(ui, |ui| {
+                    ui.label("Graphics API:");
+                    ui.label(RichText::new(game.api.label()).strong().color(Color32::from_rgb(100, 180, 255)));
+                    ui.end_row();
+
+                    ui.label("Architecture:");
+                    ui.label(if game.is_64bit { "64-bit (x86_64)" } else { "32-bit (x86)" });
+                    ui.end_row();
+
+                    ui.label("AMD FidelityFX:");
+                    ui.label(if let Some(ref tier) = game.fidelityfx_tier {
+                        RichText::new(tier.label()).color(Color32::from_rgb(255, 140, 60))
+                    } else {
+                        RichText::new("None native (OptiScaler & ReShade upgrade)").color(Color32::GRAY)
+                    });
+                    ui.end_row();
+
+                    ui.label("Native DLSS / Streamline:");
+                    ui.label(if game.has_native_dlss {
+                        RichText::new("Detected (OptiScaler converts to FSR 3.1 & FG)").color(Color32::from_rgb(120, 220, 120))
+                    } else {
+                        RichText::new("Not present (OptiScaler proxy + ReShade mode)").color(Color32::GRAY)
+                    });
+                    ui.end_row();
+
+                    ui.label("Capcom RE Engine:");
+                    ui.label(if game.is_re_engine {
+                        RichText::new("Yes (REFramework dinput8.dll will be staged)").color(Color32::from_rgb(255, 180, 80))
+                    } else {
+                        RichText::new("No").color(Color32::GRAY)
+                    });
+                    ui.end_row();
+
+                    ui.label("RenoDX HDR Mod:");
+                    ui.label(if let Some(ref m) = renodx_mod {
+                        RichText::new(format!("Available ({})", m.filename)).color(Color32::from_rgb(80, 220, 180))
+                    } else {
+                        RichText::new("Generic ReShade HDR mode").color(Color32::GRAY)
+                    });
+                    ui.end_row();
+
+                    ui.label("Anti-Cheat Shield:");
+                    ui.label(if let Some(ac) = game.anticheat {
+                        RichText::new(format!("⚠️ {ac} Detected (Caution in online play)")).color(Color32::from_rgb(255, 80, 80))
+                    } else {
+                        RichText::new("None detected (Safe for injection)").color(Color32::from_rgb(100, 200, 100))
+                    });
+                    ui.end_row();
+
+                    ui.label("OptiScaler Wiki:");
+                    ui.horizontal(|ui| {
+                        if let Some(status) = game.compat.opti_status {
+                            let (status_text, color) = match status {
+                                crate::compatibility::OptiStatus::Working => ("✅ Verified Working", Color32::from_rgb(100, 220, 120)),
+                                crate::compatibility::OptiStatus::Partial => ("⚠️ Partial / Caveats", Color32::from_rgb(255, 190, 60)),
+                                crate::compatibility::OptiStatus::NotWorking => ("❌ Incompatible / Anti-Cheat", Color32::from_rgb(255, 80, 80)),
+                            };
+                            ui.label(RichText::new(status_text).strong().color(color));
+                            if let Some(ref inputs) = game.compat.opti_inputs {
+                                ui.label(RichText::new(format!("({inputs})")).size(11.0).color(Color32::LIGHT_BLUE));
+                            }
+                            if game.compat.optipatcher_supported {
+                                ui.label(RichText::new("✨ OptiPatcher").size(11.0).color(Color32::from_rgb(255, 215, 0)));
+                            }
+                        } else {
+                            ui.label(RichText::new("Community Untested (Generic Proxy Mode)").color(Color32::GRAY));
+                        }
+                    });
+                    ui.end_row();
+
+                    ui.label("AMD FSR Redstone:");
+                    ui.horizontal(|ui| {
+                        if game.compat.fsr_redstone_supported {
+                            ui.label(RichText::new("💎 Supported").strong().color(Color32::from_rgb(255, 120, 180)));
+                            ui.label(RichText::new("(RX 7000 Series Driver 26.6.2+)").size(11.0).color(Color32::from_rgb(255, 160, 200)));
+                            if game.compat.fsr_redstone_native_fg {
+                                ui.label(RichText::new("⚡ Native FG (RX 9000)").size(11.0).color(Color32::from_rgb(255, 215, 0)));
+                            }
+                        } else {
+                            ui.label(RichText::new("Standard FSR 3.1 / 2.x").color(Color32::GRAY));
+                        }
+                    });
+                    ui.end_row();
+                });
+            });
+
+            ui.add_space(12.0);
+
+            // Enhancement Toggles
+            ui.group(|ui| {
+                ui.label(RichText::new("Enhancement Options").strong().size(15.0));
+                ui.add_space(6.0);
+
+                ui.checkbox(&mut self.config.enable_optiscaler, "OptiScaler (FSR 3.1 & Intel XeSS 1.3)");
+                ui.label(RichText::new("   Replaces in-game DLSS 2/3 calls with AMD FSR 3.1 upscaling.").size(11.0).color(Color32::GRAY));
+
+                ui.checkbox(&mut self.config.enable_frame_generation, "AMD FSR 3.1 Frame Generation");
+                ui.label(RichText::new("   Enables Nukem9's DLSS-G to FSR 3 Frame Generation bridge.").size(11.0).color(Color32::GRAY));
+
+                let is_rdna3 = self.gpu.as_ref().map_or(false, |g| g.arch.supports_fsr4_int8());
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.config.enable_fsr4_int8, "FSR 4.1.1 INT8 Neural Model");
+                    if is_rdna3 {
+                        ui.label(RichText::new("(Hardware Accelerated on your RDNA 3 GPU)").color(Color32::from_rgb(100, 220, 100)).size(11.0));
+                    }
+                });
+
+                ui.checkbox(&mut self.config.enable_reshade, "ReShade (Add-on support build)");
+                ui.label(RichText::new("   Chained cleanly alongside OptiScaler as ReShade64.dll.").size(11.0).color(Color32::GRAY));
+
+                if renodx_mod.is_some() {
+                    ui.checkbox(&mut self.config.enable_renodx, "RenoDX Game-Specific HDR Mod");
+                    ui.label(RichText::new("   Injects studio-grade HDR10/scRGB color grading into the game.").size(11.0).color(Color32::GRAY));
+                }
+
+            });
+
+            ui.add_space(10.0);
+
+            // Community Advice & Auto-Tuning Intelligence
+            if game.compat.opti_notes.is_some() || game.compat.fsr_redstone_supported || game.compat.recommended_hook.is_some() {
+                ui.group(|ui| {
+                    ui.label(RichText::new("💡 OptiScaler & AMD Community Intelligence").strong().size(14.0).color(Color32::from_rgb(255, 215, 0)));
+                    ui.add_space(4.0);
+                    if let Some(ref notes) = game.compat.opti_notes {
+                        ui.label(RichText::new(format!("Community Note: {notes}")).size(12.0).color(Color32::from_rgb(220, 220, 220)));
+                        ui.add_space(2.0);
+                    }
+                    ui.horizontal_wrapped(|ui| {
+                        if let Some(hook) = game.compat.recommended_hook {
+                            ui.label(RichText::new(format!("• Hook: {hook}")).size(11.0).color(Color32::LIGHT_BLUE));
+                        }
+                        if game.compat.auto_exposure {
+                            ui.label(RichText::new("• AutoExposure: Auto-Tuned").size(11.0).color(Color32::LIGHT_GREEN));
+                        }
+                        if game.compat.non_linear_color_space {
+                            ui.label(RichText::new("• Non-Linear Color Space: Auto-Tuned").size(11.0).color(Color32::LIGHT_GREEN));
+                        }
+                        if game.compat.disable_spoofing {
+                            ui.label(RichText::new("• Spoofing: Auto-Disabled").size(11.0).color(Color32::LIGHT_YELLOW));
+                        }
+                        if game.compat.fsr2_pattern {
+                            ui.label(RichText::new("• FSR2 Pattern: Auto-Enabled").size(11.0).color(Color32::LIGHT_GREEN));
+                        }
+                        if game.compat.force_dx12_param {
+                            ui.label(RichText::new("• Launch Option: -dx12 recommended").size(11.0).color(Color32::from_rgb(255, 140, 60)));
+                        }
+                        if game.compat.fsr_redstone_supported {
+                            ui.label(RichText::new("• FSR Redstone: RX 7000 Series Ready (Driver 26.6.2+)").size(11.0).color(Color32::from_rgb(255, 120, 180)));
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+            }
+
+            ui.add_space(6.0);
+
+            // Big 1-Click Action Buttons
+            ui.horizontal(|ui| {
+                if !mod_status.is_optiscaler_installed {
+                    let install_btn = egui::Button::new(
+                        RichText::new("🚀  1-Click Install Enhancements (AMD RDNA 3 / Universal)")
+                            .size(16.0)
+                            .strong()
+                            .color(Color32::WHITE),
+                    )
+                    .fill(Color32::from_rgb(20, 140, 70))
+                    .min_size(Vec2::new(320.0, 44.0))
+                    .rounding(Rounding::same(6.0));
+
+                    if ui.add_enabled(!self.task_running, install_btn).clicked() {
+                        self.run_install(idx);
+                    }
+                } else {
+                    let update_btn = egui::Button::new(
+                        RichText::new("🔄  Reinstall / Update Settings")
+                            .size(15.0)
+                            .strong(),
+                    )
+                    .min_size(Vec2::new(200.0, 40.0));
+
+                    if ui.add_enabled(!self.task_running, update_btn).clicked() {
+                        self.run_install(idx);
+                    }
+
+                    ui.add_space(10.0);
+
+                    let uninstall_btn = egui::Button::new(
+                        RichText::new("🗑️  Uninstall / Revert to Stock")
+                            .size(15.0)
+                            .strong()
+                            .color(Color32::from_rgb(255, 100, 100)),
+                    )
+                    .fill(Color32::from_rgb(80, 25, 30))
+                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(180, 40, 50)))
+                    .min_size(Vec2::new(200.0, 40.0))
+                    .rounding(Rounding::same(6.0));
+
+                    if ui.add_enabled(!self.task_running, uninstall_btn).clicked() {
+                        self.run_uninstall(idx);
+                    }
+                }
+            });
+
+            ui.add_space(12.0);
+
+            // Log output / Manifest summary
+            if !self.log_messages.is_empty() {
+                ui.add_space(8.0);
+                ui.collapsing("📜 Action Log & Staged Files", |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("📋 Copy Log").clicked() {
+                            let all_logs = self.log_messages.join("\n");
+                            ui.output_mut(|o| o.copied_text = all_logs);
+                        }
+                        if ui.button("Clear Log").clicked() {
+                            self.log_messages.clear();
+                        }
+                    });
+                    ui.add_space(4.0);
+
+                    egui::Frame::none()
+                        .fill(Color32::from_rgb(14, 16, 22))
+                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 64)))
+                        .rounding(Rounding::same(4.0))
+                        .inner_margin(egui::Margin::same(8.0))
+                        .show(ui, |ui| {
+                            egui::ScrollArea::vertical()
+                                .id_salt("action_log_inner_scroll")
+                                .max_height(180.0)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    for line in &self.log_messages {
+                                        for subline in line.lines() {
+                                            let (color, text) = if subline.starts_with("SUCCESS:") || subline.starts_with("Installed") {
+                                                (Color32::from_rgb(100, 220, 140), subline)
+                                            } else if subline.starts_with("ERROR:") || subline.starts_with("Failed") {
+                                                (Color32::from_rgb(255, 100, 100), subline)
+                                            } else if subline.starts_with('+') || subline.starts_with('-') {
+                                                (Color32::from_rgb(140, 200, 255), subline)
+                                            } else {
+                                                (Color32::from_rgb(210, 215, 225), subline)
+                                            };
+                                            ui.label(RichText::new(text).monospace().size(12.0).color(color));
+                                        }
+                                    }
+                                });
+                        });
+                });
+            }
+            ui.add_space(16.0);
+        });
+    });
+
+    if self.show_guide_window {
+        self.render_guide_window(ctx);
+    }
+    if self.show_updates_window {
+        self.render_updates_window(ctx);
+    }
+
+    if self.task_running || self.is_checking_updates || self.is_updating_compat_db {
+        ctx.request_repaint_after(std::time::Duration::from_millis(33));
+    }
+    }
+}
+
+impl OptiOneClickApp {
+    fn render_guide_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_guide_window;
+        egui::Window::new("📖 User Guide, Shortcuts & AMD Tips")
+            .open(&mut open)
+            .min_width(640.0)
+            .min_height(480.0)
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.guide_tab, 0, "🚀 How to Use (1-Click)");
+                    ui.selectable_value(&mut self.guide_tab, 1, "💡 AMD RX 7700 XT Tips & Tricks");
+                    ui.selectable_value(&mut self.guide_tab, 2, "⌨️ In-Game Controls & Menus");
+                    ui.selectable_value(&mut self.guide_tab, 3, "⚠️ Anti-Cheat Guidelines");
+                });
+                ui.separator();
+                ui.add_space(8.0);
+
+                egui::ScrollArea::vertical()
+                    .id_salt("guide_scroll_area")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                    match self.guide_tab {
+                        0 => {
+                            ui.heading("🚀 Quickstart: 1-Click Game Enhancement Workflow");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("1. Select Your Game").strong());
+                            ui.label("• Choose your game from the detected list in the left sidebar.\n• If your game is standalone or in another directory, click '➕ Add Custom Game Folder' and enter its path (e.g. D:\\Games\\Far Cry 5\\bin).");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("2. Review Engine & System Analysis").strong());
+                            ui.label("• Check the graphics API (DirectX 11, DirectX 12, or Vulkan).\n• Review OptiScaler Community Compatibility and AMD FSR Redstone tier.\n• OptiOneClick automatically tailors settings (AutoExposure, NonLinear, Custom Proxy Hook) to match verified community workarounds.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("3. Toggle Your Desired Enhancements").strong());
+                            ui.label("• OptiScaler: Replaces DLSS/XeSS inputs with AMD FSR 3.1.\n• FSR Frame Generation: Replaces DLSS-G calls with high-performance AMD FSR 3 frame generation.\n• FSR 4.1.1 INT8: Uses RDNA 3 WMMA tensor acceleration for next-generation visual clarity.\n• ReShade + RenoDX: Injects studio-grade HDR10/scRGB color grading and contrast adaptive sharpening.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("4. Click '1-Click Install Enhancements'").strong());
+                            ui.label("• All DLL proxies, shaders, and optimized configurations are staged in seconds.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("5. In-Game Settings").strong());
+                            ui.label("• Launch your game normally.\n• Go to Video / Graphics Settings.\n• Enable 'DLSS' (it will now run FSR 3.1 / FSR 4 INT8 through OptiScaler).\n• Enable 'DLSS Frame Generation' (it will now run AMD FSR Frame Gen).\n• Press 'Insert' or 'F12' to fine-tune OptiScaler, and 'Home' to fine-tune ReShade/RenoDX.");
+                        }
+                        1 => {
+                            ui.heading("💡 Pro Tips & Tricks for AMD Radeon RX 7000 / RX 7700 XT");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("💎 AMD FSR Redstone (FSR 4) on RX 7000 Series").strong().color(Color32::from_rgb(255, 120, 180)));
+                            ui.label("• AMD FSR 'Redstone' Upscaling is supported on AMD Radeon RX 7000 Series graphics cards with driver Adrenalin 26.6.2 and newer.\n• Because your RX 7700 XT has RDNA 3 WMMA compute units, INT8 neural tensor acceleration runs natively without emulation overhead.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("🔧 Fixing Black Screens or Cutscene Flickering").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• If a game shows a black screen or flickering during cutscenes with FSR 4, open the OptiScaler in-game overlay ('Insert') and toggle 'Non-Linear Color Space' or 'sRGB Input'.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("🔧 Fixing Exposure Blowout / Over-Bright Lighting").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• If the screen is overly bright or washed out when DLSS is engaged, enable 'AutoExposure = true' in the OptiScaler overlay or config.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("🔧 Unreal Engine DX11 Shimmering Fix").strong().color(Color32::from_rgb(255, 180, 80)));
+                            ui.label("• Unreal Engine games running DX11 with DLSS inputs may exhibit foliage shimmering due to dilated motion vectors.\n• Fix: add 'r.NGX.DLSS.DilateMotionVectors=0' under '[SystemSettings]' in the game's Engine.ini, or disable 'Display Res. MV' in OptiScaler overlay.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("🔧 Alternative Proxy Hooks").strong().color(Color32::LIGHT_BLUE));
+                            ui.label("• Most games hook cleanly using dxgi.dll. If a game crashes on launch or ignores dxgi.dll, OptiOneClick can deploy as winmm.dll, d3d12.dll, or version.dll.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("⚡ AMD Anti-Lag 2 & NVIDIA Reflex").strong().color(Color32::LIGHT_YELLOW));
+                            ui.label("• FakeNVAPI bridges NVIDIA Reflex calls straight into AMD Anti-Lag 2 for minimal input latency.");
+                        }
+                        2 => {
+                            ui.heading("⌨️ In-Game Controls & Hotkeys");
+                            ui.add_space(6.0);
+                            ui.group(|ui| {
+                                egui::Grid::new("hotkeys_grid").num_columns(2).spacing([20.0, 8.0]).show(ui, |ui| {
+                                    ui.label(RichText::new("Insert / F12").strong().color(Color32::from_rgb(100, 200, 255)));
+                                    ui.label("Toggle OptiScaler In-Game Overlay (Upscaler selection, Sharpness, Frame Gen, Motion Vectors)");
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Home").strong().color(Color32::from_rgb(255, 180, 80)));
+                                    ui.label("Toggle ReShade Overlay (Shader effects, RenoDX HDR calibration, Peak Nits, White Balance)");
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("End / Shift+F12").strong().color(Color32::from_rgb(180, 180, 180)));
+                                    ui.label("Toggle ReShade effect processing on / off in real-time");
+                                    ui.end_row();
+                                });
+                            });
+                        }
+                        3 => {
+                            ui.heading("⚠️ Anti-Cheat & Online Safety");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("Single-Player & Offline Play:").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• OptiOneClick is 100% safe to use in single-player and offline campaigns.");
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("Multiplayer / Kernel Anti-Cheat:").strong().color(Color32::from_rgb(255, 80, 80)));
+                            ui.label("• Online games guarded by kernel-level anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) will block DLL proxies (dxgi.dll) or may trigger account penalties.\n• When OptiOneClick detects an anti-cheat system, it flags a warning badge in the Engine Analysis grid.\n• For games like 7 Days to Die or Conan Exiles, disable anti-cheat or launch in singleplayer mode before injecting mods.");
+                        }
+                        _ => {}
+                    }
+                });
+            });
+        self.show_guide_window = open;
+    }
+
+    fn render_updates_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_updates_window;
+        egui::Window::new("🔄 Updates & Component Libraries")
+            .open(&mut open)
+            .min_width(680.0)
+            .min_height(420.0)
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(!self.is_checking_updates, egui::Button::new("🔍 Check Online Versions")).clicked() {
+                        self.run_check_updates();
+                    }
+                    if ui.add_enabled(!self.is_updating_compat_db, egui::Button::new("📥 Update Compatibility Wiki DB Now")).clicked() {
+                        self.run_update_compat_db();
+                    }
+                });
+
+                if let Some(ref status) = self.update_status_text {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(status).size(12.0).color(Color32::from_rgb(100, 200, 255)));
+                }
+
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                ui.label(RichText::new("Software & Package Status").strong().size(15.0));
+                ui.add_space(6.0);
+
+                egui::ScrollArea::vertical()
+                    .id_salt("updates_scroll_area")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                    if let Some(ref report) = self.update_report {
+                        egui::Grid::new("updates_grid").num_columns(4).spacing([24.0, 10.0]).show(ui, |ui| {
+                            ui.label(RichText::new("Component").strong());
+                            ui.label(RichText::new("Installed").strong());
+                            ui.label(RichText::new("Latest Online").strong());
+                            ui.label(RichText::new("Status").strong());
+                            ui.end_row();
+
+                            for comp in &report.components {
+                                ui.label(RichText::new(&comp.name).strong());
+                                ui.label(&comp.installed_version);
+                                ui.label(comp.latest_version.as_deref().unwrap_or("—"));
+                                if comp.up_to_date {
+                                    ui.label(RichText::new("✅ Up to date").color(Color32::from_rgb(100, 220, 120)));
+                                } else {
+                                    ui.label(RichText::new("🔄 Update Available").color(Color32::from_rgb(255, 180, 50)));
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    } else {
+                        ui.label("Click 'Check Online Versions' above to query GitHub for latest package releases.");
+                    }
+                });
+            });
+        self.show_updates_window = open;
+    }
+}
