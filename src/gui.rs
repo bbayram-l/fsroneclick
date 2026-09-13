@@ -857,8 +857,8 @@ impl OptiOneClickApp {
                             ui.add_space(8.0);
 
                             ui.group(|ui| {
-                                ui.label(RichText::new("Inspiration & Foundation").strong().color(Color32::from_rgb(100, 200, 255)));
-                                ui.label("• Faisal Al-Kindi (faisalkindi) — DLSS5oneclick (https://github.com/faisalkindi/DLSS5oneclick)\n  The original project that inspired this tool's existence, UI structure, and 1-click automation workflow.");
+                                ui.label(RichText::new("Inspiration & Reference").strong().color(Color32::from_rgb(100, 200, 255)));
+                                ui.label("• Faisal Al-Kindi (faisalkindi) — DLSS5oneclick (https://github.com/faisalkindi/DLSS5oneclick)\n  Inspiration for the UI layout, library scanning approach, and 1-click automation workflow.");
                             });
                             ui.add_space(8.0);
 

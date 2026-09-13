@@ -20,11 +20,11 @@ OptiOneClick is distributed as a **fully self-contained, pre-compiled Windows ex
 
 ---
 
-## Inspiration & Foundation
+## Inspiration & Reference
 
-This project was directly inspired by and builds upon the concept of **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)** by **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)**.
+This project was inspired by **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)** by **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)**.
 
-While *DLSS5oneclick* pioneered the one-click injection workflow for NVIDIA neural rendering pipelines, **OptiOneClick** adapts that automated philosophy for the AMD Radeon ecosystem (RDNA 3 / RX 7000 series with INT8 tensor acceleration and RDNA 2 / RX 6000 series) and universal GPU configurations using [OptiScaler](https://github.com/optiscaler/OptiScaler). It bridges DLSS, XeSS, and FSR calls without manual file editing or mod management headaches.
+While *DLSS5oneclick* focuses on automating the installation of the DLSS 5 Feeder / ReShade add-on pipeline for NVIDIA setups, **OptiOneClick** adopts a similar automated GUI and CLI workflow tailored for **[OptiScaler](https://github.com/optiscaler/OptiScaler)**, **AMD FSR 3.1 / 4.1.1 "Redstone"**, Frame Generation, and AMD Radeon (RDNA 3 / RDNA 2) as well as universal GPU configurations.
 
 ---
 

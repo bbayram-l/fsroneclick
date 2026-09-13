@@ -6,11 +6,11 @@ The credit for the underlying technologies belongs entirely to their original au
 
 ---
 
-## Inspiration & Foundation
+## Inspiration & Reference
 
 ### [DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)
 - **Author**: [Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)
-- **Role**: The original conceptual inspiration, user experience model, and foundational architectural design for creating an automated one-click enhancement manager. OptiOneClick adapts this vision to create an automated, hardware-aware deployment workflow for AMD Radeon GPUs and universal FSR/OptiScaler setups.
+- **Role**: Inspiration for the application layout, game library scanning approach, and 1-click deployment workflow. OptiOneClick implements an equivalent automated workflow tailored for AMD Radeon GPUs and universal FSR/OptiScaler setups.
 - **License**: MIT License
 
 ---
