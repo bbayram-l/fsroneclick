@@ -3,7 +3,12 @@ name = "optioneclick"
 version = "0.1.0"
 edition = "2021"
 authors = ["OptiOneClick Contributors"]
-description = "One-click setup of OptiScaler (FSR 3.1/4.1.1 + Frame Gen), ReShade, RenoDX HDR, and FidelityFX CAS/LumeniteFX for AMD Radeon & Universal GPUs"
+description = "One-click deployment of OptiScaler (FSR 3.1 / 4.1.1 + Frame Generation), ReShade, RenoDX HDR, and Anti-Lag 2 for AMD Radeon & Universal GPUs"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/bbayram-l/optioneclick"
+keywords = ["fsr", "optiscaler", "amd", "dlss", "upscaling"]
+categories = ["command-line-utilities", "game-development", "gui"]
 
 [dependencies]
 eframe = "0.29"

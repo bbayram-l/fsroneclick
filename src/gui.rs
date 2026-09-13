@@ -303,10 +303,10 @@ impl eframe::App for OptiOneClickApp {
                 ui.label(RichText::new("· AMD RDNA 3 & Universal Game Enhancer").size(14.0).color(Color32::GRAY));
 
                 ui.add_space(16.0);
-                if ui.button(RichText::new("📖 Guide & Tips").size(12.0).strong()).clicked() {
+                if ui.button(RichText::new("Documentation").size(12.0).strong()).clicked() {
                     self.show_guide_window = !self.show_guide_window;
                 }
-                if ui.button(RichText::new("🔄 Updates & Libraries").size(12.0).strong()).clicked() {
+                if ui.button(RichText::new("Component Status").size(12.0).strong()).clicked() {
                     self.show_updates_window = !self.show_updates_window;
                     if self.update_report.is_none() && !self.is_checking_updates {
                         self.run_check_updates();
@@ -330,7 +330,7 @@ impl eframe::App for OptiOneClickApp {
 
             if let Some(ref gpu) = self.gpu {
                 ui.add_space(4.0);
-                ui.label(RichText::new(format!("Hardware Status: {}", gpu.arch.label())).size(12.0).color(Color32::from_rgb(140, 200, 140)));
+                ui.label(RichText::new(format!("Hardware Architecture: {}", gpu.arch.label())).size(12.0).color(Color32::from_rgb(140, 200, 140)));
             }
             ui.add_space(8.0);
         });
@@ -358,14 +358,14 @@ impl eframe::App for OptiOneClickApp {
             ui.horizontal(|ui| {
                 let search_resp = ui.add(
                     egui::TextEdit::singleline(&mut self.search_query)
-                        .hint_text("🔍 Search games...")
+                        .hint_text("Filter installed games...")
                         .desired_width(220.0),
                 );
                 if search_resp.changed() {
                     self.update_filter();
                 }
 
-                if ui.button("🔄 Rescan").clicked() {
+                if ui.button("Rescan").clicked() {
                     self.refresh_games();
                 }
             });
@@ -375,7 +375,7 @@ impl eframe::App for OptiOneClickApp {
             ui.add_space(4.0);
 
             // Custom Folder Adder
-            ui.collapsing("➕ Add Custom Game Folder", |ui| {
+            ui.collapsing("Add Custom Game Directory", |ui| {
                 ui.horizontal(|ui| {
                     ui.text_edit_singleline(&mut self.custom_path_input);
                     if ui.button("Add").clicked() && !self.custom_path_input.trim().is_empty() {
@@ -428,16 +428,16 @@ impl eframe::App for OptiOneClickApp {
                             ui.label(RichText::new(g.api.label()).size(10.0).color(Color32::from_rgb(100, 160, 220)));
 
                             if g.compat.fsr_redstone_supported {
-                                ui.label(RichText::new("● Redstone").size(10.0).color(Color32::from_rgb(255, 120, 120)));
+                                ui.label(RichText::new("[Redstone]").size(10.0).color(Color32::from_rgb(255, 120, 120)));
                             } else if g.compat.opti_status.is_some() {
-                                ui.label(RichText::new("● Opti").size(10.0).color(Color32::from_rgb(100, 220, 150)));
+                                ui.label(RichText::new("[OptiScaler]").size(10.0).color(Color32::from_rgb(100, 220, 150)));
                             }
 
                             if mod_status.is_optiscaler_installed {
-                                ui.label(RichText::new("● Modded").size(10.0).color(Color32::from_rgb(80, 220, 120)));
+                                ui.label(RichText::new("[Installed]").size(10.0).color(Color32::from_rgb(80, 220, 120)));
                             }
                             if mod_status.installed_renodx_mod.is_some() {
-                                ui.label(RichText::new("● HDR").size(10.0).color(Color32::from_rgb(255, 180, 50)));
+                                ui.label(RichText::new("[HDR]").size(10.0).color(Color32::from_rgb(255, 180, 50)));
                             }
                         });
                         ui.add_space(4.0);
@@ -531,31 +531,31 @@ impl eframe::App for OptiOneClickApp {
                     });
                     ui.end_row();
 
-                    ui.label("Anti-Cheat Shield:");
+                    ui.label("Anti-Cheat System:");
                     ui.label(if let Some(ac) = game.anticheat {
-                        RichText::new(format!("⚠️ {ac} Detected (Caution in online play)")).color(Color32::from_rgb(255, 80, 80))
+                        RichText::new(format!("{ac} detected (avoid in online multiplayer)")).color(Color32::from_rgb(255, 90, 90))
                     } else {
-                        RichText::new("None detected (Safe for injection)").color(Color32::from_rgb(100, 200, 100))
+                        RichText::new("None detected (safe for runtime injection)").color(Color32::from_rgb(110, 210, 110))
                     });
                     ui.end_row();
 
-                    ui.label("OptiScaler Wiki:");
+                    ui.label("OptiScaler Profile:");
                     ui.horizontal(|ui| {
                         if let Some(status) = game.compat.opti_status {
                             let (status_text, color) = match status {
-                                crate::compatibility::OptiStatus::Working => ("✅ Verified Working", Color32::from_rgb(100, 220, 120)),
-                                crate::compatibility::OptiStatus::Partial => ("⚠️ Partial / Caveats", Color32::from_rgb(255, 190, 60)),
-                                crate::compatibility::OptiStatus::NotWorking => ("❌ Incompatible / Anti-Cheat", Color32::from_rgb(255, 80, 80)),
+                                crate::compatibility::OptiStatus::Working => ("Verified Working", Color32::from_rgb(100, 220, 120)),
+                                crate::compatibility::OptiStatus::Partial => ("Partial Support / Caveats", Color32::from_rgb(255, 190, 60)),
+                                crate::compatibility::OptiStatus::NotWorking => ("Unsupported / Incompatible", Color32::from_rgb(255, 80, 80)),
                             };
                             ui.label(RichText::new(status_text).strong().color(color));
                             if let Some(ref inputs) = game.compat.opti_inputs {
-                                ui.label(RichText::new(format!("({inputs})")).size(11.0).color(Color32::LIGHT_BLUE));
+                                ui.label(RichText::new(format!("[{inputs}]")).size(11.0).color(Color32::LIGHT_BLUE));
                             }
                             if game.compat.optipatcher_supported {
-                                ui.label(RichText::new("✨ OptiPatcher").size(11.0).color(Color32::from_rgb(255, 215, 0)));
+                                ui.label(RichText::new("[OptiPatcher]").size(11.0).color(Color32::from_rgb(255, 215, 0)));
                             }
                         } else {
-                            ui.label(RichText::new("Community Untested (Generic Proxy Mode)").color(Color32::GRAY));
+                            ui.label(RichText::new("Generic Proxy Mode (Untested)").color(Color32::GRAY));
                         }
                     });
                     ui.end_row();
@@ -563,10 +563,10 @@ impl eframe::App for OptiOneClickApp {
                     ui.label("AMD FSR Redstone:");
                     ui.horizontal(|ui| {
                         if game.compat.fsr_redstone_supported {
-                            ui.label(RichText::new("💎 Supported").strong().color(Color32::from_rgb(255, 120, 180)));
-                            ui.label(RichText::new("(RX 7000 Series Driver 26.6.2+)").size(11.0).color(Color32::from_rgb(255, 160, 200)));
+                            ui.label(RichText::new("Supported").strong().color(Color32::from_rgb(255, 120, 180)));
+                            ui.label(RichText::new("(RX 7000 Series / Driver 26.6.2+)").size(11.0).color(Color32::from_rgb(255, 160, 200)));
                             if game.compat.fsr_redstone_native_fg {
-                                ui.label(RichText::new("⚡ Native FG (RX 9000)").size(11.0).color(Color32::from_rgb(255, 215, 0)));
+                                ui.label(RichText::new("[Native FG]").size(11.0).color(Color32::from_rgb(255, 215, 0)));
                             }
                         } else {
                             ui.label(RichText::new("Standard FSR 3.1 / 2.x").color(Color32::GRAY));
@@ -612,33 +612,33 @@ impl eframe::App for OptiOneClickApp {
             // Community Advice & Auto-Tuning Intelligence
             if game.compat.opti_notes.is_some() || game.compat.fsr_redstone_supported || game.compat.recommended_hook.is_some() {
                 ui.group(|ui| {
-                    ui.label(RichText::new("💡 OptiScaler & AMD Community Intelligence").strong().size(14.0).color(Color32::from_rgb(255, 215, 0)));
+                    ui.label(RichText::new("Community Recommendations & Auto-Tuning").strong().size(14.0).color(Color32::from_rgb(230, 235, 245)));
                     ui.add_space(4.0);
                     if let Some(ref notes) = game.compat.opti_notes {
-                        ui.label(RichText::new(format!("Community Note: {notes}")).size(12.0).color(Color32::from_rgb(220, 220, 220)));
+                        ui.label(RichText::new(format!("Note: {notes}")).size(12.0).color(Color32::from_rgb(210, 215, 225)));
                         ui.add_space(2.0);
                     }
                     ui.horizontal_wrapped(|ui| {
                         if let Some(hook) = game.compat.recommended_hook {
-                            ui.label(RichText::new(format!("• Hook: {hook}")).size(11.0).color(Color32::LIGHT_BLUE));
+                            ui.label(RichText::new(format!("[Hook: {hook}]")).size(11.0).color(Color32::LIGHT_BLUE));
                         }
                         if game.compat.auto_exposure {
-                            ui.label(RichText::new("• AutoExposure: Auto-Tuned").size(11.0).color(Color32::LIGHT_GREEN));
+                            ui.label(RichText::new("[AutoExposure: Enabled]").size(11.0).color(Color32::LIGHT_GREEN));
                         }
                         if game.compat.non_linear_color_space {
-                            ui.label(RichText::new("• Non-Linear Color Space: Auto-Tuned").size(11.0).color(Color32::LIGHT_GREEN));
+                            ui.label(RichText::new("[Color Space: Non-Linear]").size(11.0).color(Color32::LIGHT_GREEN));
                         }
                         if game.compat.disable_spoofing {
-                            ui.label(RichText::new("• Spoofing: Auto-Disabled").size(11.0).color(Color32::LIGHT_YELLOW));
+                            ui.label(RichText::new("[Spoofing: Disabled]").size(11.0).color(Color32::LIGHT_YELLOW));
                         }
                         if game.compat.fsr2_pattern {
-                            ui.label(RichText::new("• FSR2 Pattern: Auto-Enabled").size(11.0).color(Color32::LIGHT_GREEN));
+                            ui.label(RichText::new("[FSR2 Pattern: Active]").size(11.0).color(Color32::LIGHT_GREEN));
                         }
                         if game.compat.force_dx12_param {
-                            ui.label(RichText::new("• Launch Option: -dx12 recommended").size(11.0).color(Color32::from_rgb(255, 140, 60)));
+                            ui.label(RichText::new("[-dx12 flag recommended]").size(11.0).color(Color32::from_rgb(255, 140, 60)));
                         }
                         if game.compat.fsr_redstone_supported {
-                            ui.label(RichText::new("• FSR Redstone: RX 7000 Series Ready (Driver 26.6.2+)").size(11.0).color(Color32::from_rgb(255, 120, 180)));
+                            ui.label(RichText::new("[FSR Redstone: Compatible]").size(11.0).color(Color32::from_rgb(255, 120, 180)));
                         }
                     });
                 });
@@ -647,29 +647,30 @@ impl eframe::App for OptiOneClickApp {
 
             ui.add_space(6.0);
 
-            // Big 1-Click Action Buttons
+            // Action Buttons
             ui.horizontal(|ui| {
                 if !mod_status.is_optiscaler_installed {
                     let install_btn = egui::Button::new(
-                        RichText::new("🚀  1-Click Install Enhancements (AMD RDNA 3 / Universal)")
-                            .size(16.0)
+                        RichText::new("Install Enhancements")
+                            .size(15.0)
                             .strong()
                             .color(Color32::WHITE),
                     )
-                    .fill(Color32::from_rgb(20, 140, 70))
-                    .min_size(Vec2::new(320.0, 44.0))
-                    .rounding(Rounding::same(6.0));
+                    .fill(Color32::from_rgb(16, 120, 70))
+                    .min_size(Vec2::new(240.0, 40.0))
+                    .rounding(Rounding::same(4.0));
 
                     if ui.add_enabled(!self.task_running, install_btn).clicked() {
                         self.run_install(idx);
                     }
                 } else {
                     let update_btn = egui::Button::new(
-                        RichText::new("🔄  Reinstall / Update Settings")
-                            .size(15.0)
+                        RichText::new("Update Configuration")
+                            .size(14.0)
                             .strong(),
                     )
-                    .min_size(Vec2::new(200.0, 40.0));
+                    .min_size(Vec2::new(180.0, 38.0))
+                    .rounding(Rounding::same(4.0));
 
                     if ui.add_enabled(!self.task_running, update_btn).clicked() {
                         self.run_install(idx);
@@ -678,15 +679,15 @@ impl eframe::App for OptiOneClickApp {
                     ui.add_space(10.0);
 
                     let uninstall_btn = egui::Button::new(
-                        RichText::new("🗑️  Uninstall / Revert to Stock")
-                            .size(15.0)
+                        RichText::new("Uninstall Enhancements")
+                            .size(14.0)
                             .strong()
-                            .color(Color32::from_rgb(255, 100, 100)),
+                            .color(Color32::from_rgb(255, 120, 120)),
                     )
-                    .fill(Color32::from_rgb(80, 25, 30))
-                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(180, 40, 50)))
-                    .min_size(Vec2::new(200.0, 40.0))
-                    .rounding(Rounding::same(6.0));
+                    .fill(Color32::from_rgb(60, 24, 28))
+                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(140, 40, 50)))
+                    .min_size(Vec2::new(180.0, 38.0))
+                    .rounding(Rounding::same(4.0));
 
                     if ui.add_enabled(!self.task_running, uninstall_btn).clicked() {
                         self.run_uninstall(idx);
@@ -699,13 +700,13 @@ impl eframe::App for OptiOneClickApp {
             // Log output / Manifest summary
             if !self.log_messages.is_empty() {
                 ui.add_space(8.0);
-                ui.collapsing("📜 Action Log & Staged Files", |ui| {
+                ui.collapsing("Execution Log", |ui| {
                     ui.horizontal(|ui| {
-                        if ui.button("📋 Copy Log").clicked() {
+                        if ui.button("Copy Output").clicked() {
                             let all_logs = self.log_messages.join("\n");
                             ui.output_mut(|o| o.copied_text = all_logs);
                         }
-                        if ui.button("Clear Log").clicked() {
+                        if ui.button("Clear").clicked() {
                             self.log_messages.clear();
                         }
                     });
@@ -760,7 +761,7 @@ impl eframe::App for OptiOneClickApp {
 impl OptiOneClickApp {
     fn render_guide_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_guide_window;
-        egui::Window::new("📖 User Guide, Shortcuts & AMD Tips")
+        egui::Window::new("Documentation & Tuning Guide")
             .open(&mut open)
             .min_width(640.0)
             .min_height(480.0)
@@ -768,10 +769,11 @@ impl OptiOneClickApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.guide_tab, 0, "🚀 How to Use (1-Click)");
-                    ui.selectable_value(&mut self.guide_tab, 1, "💡 AMD RX 7700 XT Tips & Tricks");
-                    ui.selectable_value(&mut self.guide_tab, 2, "⌨️ In-Game Controls & Menus");
-                    ui.selectable_value(&mut self.guide_tab, 3, "⚠️ Anti-Cheat Guidelines");
+                    ui.selectable_value(&mut self.guide_tab, 0, "Quickstart");
+                    ui.selectable_value(&mut self.guide_tab, 1, "Radeon RX 7000 / RDNA 3");
+                    ui.selectable_value(&mut self.guide_tab, 2, "In-Game Keybindings");
+                    ui.selectable_value(&mut self.guide_tab, 3, "Anti-Cheat Safety");
+                    ui.selectable_value(&mut self.guide_tab, 4, "Credits & Licenses");
                 });
                 ui.separator();
                 ui.add_space(8.0);
@@ -782,71 +784,102 @@ impl OptiOneClickApp {
                     .show(ui, |ui| {
                     match self.guide_tab {
                         0 => {
-                            ui.heading("🚀 Quickstart: 1-Click Game Enhancement Workflow");
+                            ui.heading("Quickstart: 1-Click Installation Workflow");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("1. Select Your Game").strong());
-                            ui.label("• Choose your game from the detected list in the left sidebar.\n• If your game is standalone or in another directory, click '➕ Add Custom Game Folder' and enter its path (e.g. D:\\Games\\Far Cry 5\\bin).");
+                            ui.label(RichText::new("1. Select Your Target Game").strong());
+                            ui.label("• Select a detected game from the left sidebar.\n• For custom or non-store installations, open 'Add Custom Game Directory' and specify the binary path (e.g. D:\\Games\\Far Cry 5\\bin).");
                             ui.add_space(6.0);
                             ui.label(RichText::new("2. Review Engine & System Analysis").strong());
-                            ui.label("• Check the graphics API (DirectX 11, DirectX 12, or Vulkan).\n• Review OptiScaler Community Compatibility and AMD FSR Redstone tier.\n• OptiOneClick automatically tailors settings (AutoExposure, NonLinear, Custom Proxy Hook) to match verified community workarounds.");
+                            ui.label("• Verify the graphics API (DirectX 11, DirectX 12, or Vulkan).\n• Review OptiScaler Community Compatibility profile and AMD FSR Redstone tier.\n• OptiOneClick automatically configures recommended engine flags (AutoExposure, Non-Linear Color Space, Custom Proxy Hooks) matching verified upstream workarounds.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("3. Toggle Your Desired Enhancements").strong());
-                            ui.label("• OptiScaler: Replaces DLSS/XeSS inputs with AMD FSR 3.1.\n• FSR Frame Generation: Replaces DLSS-G calls with high-performance AMD FSR 3 frame generation.\n• FSR 4.1.1 INT8: Uses RDNA 3 WMMA tensor acceleration for next-generation visual clarity.\n• ReShade + RenoDX: Injects studio-grade HDR10/scRGB color grading and contrast adaptive sharpening.");
+                            ui.label(RichText::new("3. Configure Enhancement Options").strong());
+                            ui.label("• OptiScaler: Intercepts DLSS and XeSS API calls, routing them into AMD FSR 3.1.\n• FSR Frame Generation: Replaces DLSS-G calls with AMD FSR 3 frame generation.\n• FSR 4.1.1 INT8: Employs RDNA 3 WMMA tensor instructions for machine-learning super-resolution.\n• ReShade + RenoDX: Loads HDR10/scRGB color grading and Contrast Adaptive Sharpening (CAS).");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("4. Click '1-Click Install Enhancements'").strong());
-                            ui.label("• All DLL proxies, shaders, and optimized configurations are staged in seconds.");
+                            ui.label(RichText::new("4. Apply Enhancements").strong());
+                            ui.label("• Click 'Install Enhancements'. All proxy libraries, Agility SDK runtimes, ASI patchers, and configuration files are deployed instantly.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("5. In-Game Settings").strong());
-                            ui.label("• Launch your game normally.\n• Go to Video / Graphics Settings.\n• Enable 'DLSS' (it will now run FSR 3.1 / FSR 4 INT8 through OptiScaler).\n• Enable 'DLSS Frame Generation' (it will now run AMD FSR Frame Gen).\n• Press 'Insert' or 'F12' to fine-tune OptiScaler, and 'Home' to fine-tune ReShade/RenoDX.");
+                            ui.label(RichText::new("5. In-Game Configuration").strong());
+                            ui.label("• Launch your game normally.\n• In Video / Display options, enable 'DLSS' (now powered by FSR 3.1 / FSR 4 INT8).\n• Enable 'DLSS Frame Generation' (now running AMD FSR Frame Generation).\n• Press 'Insert' or 'F12' to open OptiScaler overlay, and 'Home' to access ReShade/RenoDX.");
                         }
                         1 => {
-                            ui.heading("💡 Pro Tips & Tricks for AMD Radeon RX 7000 / RX 7700 XT");
+                            ui.heading("Architecture Tuning: AMD Radeon RX 7000 / RDNA 3");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("💎 AMD FSR Redstone (FSR 4) on RX 7000 Series").strong().color(Color32::from_rgb(255, 120, 180)));
-                            ui.label("• AMD FSR 'Redstone' Upscaling is supported on AMD Radeon RX 7000 Series graphics cards with driver Adrenalin 26.6.2 and newer.\n• Because your RX 7700 XT has RDNA 3 WMMA compute units, INT8 neural tensor acceleration runs natively without emulation overhead.");
+                            ui.label(RichText::new("AMD FSR Redstone (FSR 4) on RX 7000 Series").strong().color(Color32::from_rgb(255, 120, 180)));
+                            ui.label("• AMD FSR 'Redstone' upscaling is supported on AMD Radeon RX 7000 Series GPUs using driver Adrenalin 26.6.2 or newer.\n• RDNA 3 WMMA matrix units execute INT8 tensor operations with zero emulation penalty.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("🔧 Fixing Black Screens or Cutscene Flickering").strong().color(Color32::LIGHT_GREEN));
-                            ui.label("• If a game shows a black screen or flickering during cutscenes with FSR 4, open the OptiScaler in-game overlay ('Insert') and toggle 'Non-Linear Color Space' or 'sRGB Input'.");
+                            ui.label(RichText::new("Cutscene Flickering or Black Screen Resolution").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• If cutscenes or menus flicker under FSR 4, open the OptiScaler overlay ('Insert') and set 'FsrNonLinearColorSpace = true' or enable 'sRGB Input'.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("🔧 Fixing Exposure Blowout / Over-Bright Lighting").strong().color(Color32::LIGHT_GREEN));
-                            ui.label("• If the screen is overly bright or washed out when DLSS is engaged, enable 'AutoExposure = true' in the OptiScaler overlay or config.");
+                            ui.label(RichText::new("Over-Bright / Blown-Out Exposure").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• If lighting appears over-exposed in dark areas, enable 'AutoExposure = true' in OptiScaler settings.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("🔧 Unreal Engine DX11 Shimmering Fix").strong().color(Color32::from_rgb(255, 180, 80)));
-                            ui.label("• Unreal Engine games running DX11 with DLSS inputs may exhibit foliage shimmering due to dilated motion vectors.\n• Fix: add 'r.NGX.DLSS.DilateMotionVectors=0' under '[SystemSettings]' in the game's Engine.ini, or disable 'Display Res. MV' in OptiScaler overlay.");
+                            ui.label(RichText::new("Unreal Engine DX11 Foliage Shimmering").strong().color(Color32::from_rgb(255, 180, 80)));
+                            ui.label("• For Unreal Engine DX11 games experiencing motion vector jitter, add 'r.NGX.DLSS.DilateMotionVectors=0' to Engine.ini under '[SystemSettings]'.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("🔧 Alternative Proxy Hooks").strong().color(Color32::LIGHT_BLUE));
-                            ui.label("• Most games hook cleanly using dxgi.dll. If a game crashes on launch or ignores dxgi.dll, OptiOneClick can deploy as winmm.dll, d3d12.dll, or version.dll.");
+                            ui.label(RichText::new("Alternative Proxy Hook Types").strong().color(Color32::LIGHT_BLUE));
+                            ui.label("• Most titles hook cleanly through dxgi.dll. For games with custom DXGI wrappers, OptiOneClick can deploy as winmm.dll, d3d12.dll, or version.dll.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("⚡ AMD Anti-Lag 2 & NVIDIA Reflex").strong().color(Color32::LIGHT_YELLOW));
-                            ui.label("• FakeNVAPI bridges NVIDIA Reflex calls straight into AMD Anti-Lag 2 for minimal input latency.");
+                            ui.label(RichText::new("Latency Reduction: Reflex to Anti-Lag 2").strong().color(Color32::LIGHT_YELLOW));
+                            ui.label("• FakeNVAPI dynamically routes NVIDIA Reflex synchronization into AMD Anti-Lag 2 for low input latency.");
                         }
                         2 => {
-                            ui.heading("⌨️ In-Game Controls & Hotkeys");
+                            ui.heading("In-Game Keybindings");
                             ui.add_space(6.0);
                             ui.group(|ui| {
-                                egui::Grid::new("hotkeys_grid").num_columns(2).spacing([20.0, 8.0]).show(ui, |ui| {
+                                egui::Grid::new("hotkeys_grid").num_columns(2).spacing([24.0, 10.0]).show(ui, |ui| {
                                     ui.label(RichText::new("Insert / F12").strong().color(Color32::from_rgb(100, 200, 255)));
-                                    ui.label("Toggle OptiScaler In-Game Overlay (Upscaler selection, Sharpness, Frame Gen, Motion Vectors)");
+                                    ui.label("Toggle OptiScaler In-Game Menu (Upscaler backend, Sharpness, Frame Gen, Motion Vectors)");
                                     ui.end_row();
 
                                     ui.label(RichText::new("Home").strong().color(Color32::from_rgb(255, 180, 80)));
-                                    ui.label("Toggle ReShade Overlay (Shader effects, RenoDX HDR calibration, Peak Nits, White Balance)");
+                                    ui.label("Toggle ReShade Menu (Shader effects, RenoDX HDR calibration, Peak Nits, White Point)");
                                     ui.end_row();
 
                                     ui.label(RichText::new("End / Shift+F12").strong().color(Color32::from_rgb(180, 180, 180)));
-                                    ui.label("Toggle ReShade effect processing on / off in real-time");
+                                    ui.label("Toggle ReShade post-processing pipeline on / off");
                                     ui.end_row();
                                 });
                             });
                         }
                         3 => {
-                            ui.heading("⚠️ Anti-Cheat & Online Safety");
+                            ui.heading("Anti-Cheat Safety Guidelines");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("Single-Player & Offline Play:").strong().color(Color32::LIGHT_GREEN));
-                            ui.label("• OptiOneClick is 100% safe to use in single-player and offline campaigns.");
+                            ui.label(RichText::new("Single-Player & Offline Games:").strong().color(Color32::LIGHT_GREEN));
+                            ui.label("• OptiOneClick is completely safe for single-player campaigns and offline play.");
                             ui.add_space(6.0);
-                            ui.label(RichText::new("Multiplayer / Kernel Anti-Cheat:").strong().color(Color32::from_rgb(255, 80, 80)));
-                            ui.label("• Online games guarded by kernel-level anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) will block DLL proxies (dxgi.dll) or may trigger account penalties.\n• When OptiOneClick detects an anti-cheat system, it flags a warning badge in the Engine Analysis grid.\n• For games like 7 Days to Die or Conan Exiles, disable anti-cheat or launch in singleplayer mode before injecting mods.");
+                            ui.label(RichText::new("Multiplayer / Kernel Anti-Cheat Protected Titles:").strong().color(Color32::from_rgb(255, 90, 90)));
+                            ui.label("• Titles protected by kernel-level anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) will block DLL proxy hooks (such as dxgi.dll) and may flag accounts.\n• When OptiOneClick detects an active anti-cheat system, it flags a warning badge in the System Analysis panel.\n• Always launch games in offline or single-player mode when using DLL mod proxies.");
+                        }
+                        4 => {
+                            ui.heading("Credits & Third-Party Licenses");
+                            ui.add_space(6.0);
+                            ui.label("OptiOneClick automates, coordinates, and stages other creators' exceptional open-source work.");
+                            ui.add_space(8.0);
+
+                            ui.group(|ui| {
+                                ui.label(RichText::new("Inspiration & Foundation").strong().color(Color32::from_rgb(100, 200, 255)));
+                                ui.label("• Faisal Al-Kindi (faisalkindi) — DLSS5oneclick (https://github.com/faisalkindi/DLSS5oneclick)\n  The original project that inspired this tool's existence, UI structure, and 1-click automation workflow.");
+                            });
+                            ui.add_space(8.0);
+
+                            ui.group(|ui| {
+                                ui.label(RichText::new("Core Runtimes & Components").strong().color(Color32::from_rgb(255, 180, 80)));
+                                ui.label("• OptiScaler Team & cdozdil — OptiScaler (GPL-3.0 / MIT)\n  DLSS/XeSS to AMD FSR 3.1 & FSR 4 translation layer and frame generation runtime.");
+                                ui.add_space(4.0);
+                                ui.label("• AMD (GPUOpen) — FidelityFX SDK & FSR Redstone (MIT)\n  Temporal upscaling, frame generation, and RDNA 3 WMMA INT8 tensor acceleration.");
+                                ui.add_space(4.0);
+                                ui.label("• crosire — ReShade & reshade-shaders (BSD 3-Clause)\n  Generic post-processing injection framework and shader runtime.");
+                                ui.add_space(4.0);
+                                ui.label("• clshortfuse & RenoDX Community — RenoDX (MIT)\n  True native HDR reconstruction and tonemapping add-on.");
+                                ui.add_space(4.0);
+                                ui.label("• OptiPatcher & Community Contributors — OptiPatcher\n  In-memory signature patches neutralizing proprietary RTX vendor locks to prevent crashes.");
+                                ui.add_space(4.0);
+                                ui.label("• Afzaal (Kaidō) — LumeniteFX (MIT)\n  Motion-vector reconstruction and tonemapping shaders.");
+                                ui.add_space(4.0);
+                                ui.label("• Emil Ernerfeldt (emilk) — egui & eframe (MIT / Apache-2.0)\n  Immediate-mode GUI toolkit for Rust.");
+                                ui.add_space(4.0);
+                                ui.label("• JetBrains — JetBrains Mono (SIL OFL)\n  Monospace typography.");
+                            });
                         }
                         _ => {}
                     }
@@ -857,7 +890,7 @@ impl OptiOneClickApp {
 
     fn render_updates_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_updates_window;
-        egui::Window::new("🔄 Updates & Component Libraries")
+        egui::Window::new("Component Status & Updates")
             .open(&mut open)
             .min_width(680.0)
             .min_height(420.0)
@@ -865,10 +898,10 @@ impl OptiOneClickApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!self.is_checking_updates, egui::Button::new("🔍 Check Online Versions")).clicked() {
+                    if ui.add_enabled(!self.is_checking_updates, egui::Button::new("Check Upstream Versions")).clicked() {
                         self.run_check_updates();
                     }
-                    if ui.add_enabled(!self.is_updating_compat_db, egui::Button::new("📥 Update Compatibility Wiki DB Now")).clicked() {
+                    if ui.add_enabled(!self.is_updating_compat_db, egui::Button::new("Sync Compatibility Wiki DB")).clicked() {
                         self.run_update_compat_db();
                     }
                 });
@@ -882,7 +915,7 @@ impl OptiOneClickApp {
                 ui.separator();
                 ui.add_space(8.0);
 
-                ui.label(RichText::new("Software & Package Status").strong().size(15.0));
+                ui.label(RichText::new("Package & Library Status").strong().size(15.0));
                 ui.add_space(6.0);
 
                 egui::ScrollArea::vertical()
@@ -893,7 +926,7 @@ impl OptiOneClickApp {
                         egui::Grid::new("updates_grid").num_columns(4).spacing([24.0, 10.0]).show(ui, |ui| {
                             ui.label(RichText::new("Component").strong());
                             ui.label(RichText::new("Installed").strong());
-                            ui.label(RichText::new("Latest Online").strong());
+                            ui.label(RichText::new("Upstream Release").strong());
                             ui.label(RichText::new("Status").strong());
                             ui.end_row();
 
@@ -902,15 +935,15 @@ impl OptiOneClickApp {
                                 ui.label(&comp.installed_version);
                                 ui.label(comp.latest_version.as_deref().unwrap_or("—"));
                                 if comp.up_to_date {
-                                    ui.label(RichText::new("✅ Up to date").color(Color32::from_rgb(100, 220, 120)));
+                                    ui.label(RichText::new("Current").color(Color32::from_rgb(100, 220, 120)));
                                 } else {
-                                    ui.label(RichText::new("🔄 Update Available").color(Color32::from_rgb(255, 180, 50)));
+                                    ui.label(RichText::new("Update Available").color(Color32::from_rgb(255, 180, 50)));
                                 }
                                 ui.end_row();
                             }
                         });
                     } else {
-                        ui.label("Click 'Check Online Versions' above to query GitHub for latest package releases.");
+                        ui.label("Click 'Check Upstream Versions' to query GitHub releases for latest components.");
                     }
                 });
             });
