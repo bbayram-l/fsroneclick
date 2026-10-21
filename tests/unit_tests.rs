@@ -2,7 +2,9 @@
 
 use fsroneclick::game::{GameInfo, GraphicsApi, Store, MANIFEST_NAME, OPTI_PROXY, RESHADE_DLL};
 use fsroneclick::gpu::Arch;
-use fsroneclick::installer::{generate_optiscaler_ini, generate_reshade_ini, uninstall, InstallConfig};
+use fsroneclick::installer::{
+    generate_optiscaler_ini, generate_reshade_ini, uninstall, InstallConfig,
+};
 use fsroneclick::renodx::{self, RenoDxMod};
 use std::collections::HashMap;
 use std::fs;
@@ -10,7 +12,10 @@ use std::fs;
 #[test]
 fn test_title_normalization() {
     assert_eq!(renodx::normalize_title("Cyberpunk 2077"), "cyberpunk2077");
-    assert_eq!(renodx::normalize_title("The Witcher 3: Wild Hunt"), "thewitcher3wildhunt");
+    assert_eq!(
+        renodx::normalize_title("The Witcher 3: Wild Hunt"),
+        "thewitcher3wildhunt"
+    );
     assert_eq!(renodx::normalize_title("Alan Wake II"), "alanwakeii");
 }
 
@@ -39,44 +44,62 @@ fn test_renodx_matching() {
 
 #[test]
 fn test_optiscaler_ini_generation_rdna3() {
-    let mut config = InstallConfig::default();
-    config.enable_frame_generation = true;
-    config.enable_fsr4_int8 = true;
-    config.enable_reshade = true;
+    let config = InstallConfig {
+        enable_frame_generation: true,
+        enable_fsr4_int8: true,
+        enable_reshade: true,
+        ..InstallConfig::default()
+    };
     let compat = fsroneclick::compatibility::CompatibilityProfile::default();
 
     let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
 
     assert!(ini.contains("Dx12Upscaler = fsr31"));
     assert!(ini.contains("Dx11Upscaler = fsr31"));
-    assert!(ini.contains("Fsr4Update = true"), "RDNA 3 must have Fsr4Update enabled for INT8 acceleration");
-    assert!(ini.contains("Enabled = true"), "Frame generation must be enabled");
+    assert!(
+        ini.contains("Fsr4Update = true"),
+        "RDNA 3 must have Fsr4Update enabled for INT8 acceleration"
+    );
+    assert!(
+        ini.contains("Enabled = true"),
+        "Frame generation must be enabled"
+    );
     assert!(ini.contains("FGInput = dlssg"));
     assert!(ini.contains("FGOutput = fsrfg"));
-    assert!(ini.contains("LoadReshade = true"), "ReShade plugin loading must be enabled");
+    assert!(
+        ini.contains("LoadReshade = true"),
+        "ReShade plugin loading must be enabled"
+    );
     assert!(ini.contains("ReshadePath = ReShade64.dll"));
 }
 
 #[test]
 fn test_optiscaler_ini_generation_non_rdna3() {
-    let mut config = InstallConfig::default();
-    config.enable_fsr4_int8 = true;
+    let config = InstallConfig {
+        enable_fsr4_int8: true,
+        ..InstallConfig::default()
+    };
     let compat = fsroneclick::compatibility::CompatibilityProfile::default();
 
     let ini = generate_optiscaler_ini(&config, &Arch::Rdna2, &compat);
 
-    assert!(ini.contains("Fsr4Update = false"), "Non-RDNA 3 should not auto-enable INT8 update");
+    assert!(
+        ini.contains("Fsr4Update = false"),
+        "Non-RDNA 3 should not auto-enable INT8 update"
+    );
 }
 
 #[test]
 fn test_optiscaler_ini_auto_tuning() {
     let config = InstallConfig::default();
-    let mut compat = fsroneclick::compatibility::CompatibilityProfile::default();
-    compat.auto_exposure = true;
-    compat.non_linear_color_space = true;
-    compat.disable_spoofing = true;
-    compat.fsr2_pattern = true;
-    compat.optipatcher_supported = true;
+    let compat = fsroneclick::compatibility::CompatibilityProfile {
+        auto_exposure: true,
+        non_linear_color_space: true,
+        disable_spoofing: true,
+        fsr2_pattern: true,
+        optipatcher_supported: true,
+        ..Default::default()
+    };
 
     let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
 
@@ -84,7 +107,10 @@ fn test_optiscaler_ini_auto_tuning() {
     assert!(ini.contains("FsrNonLinearColorSpace = true"));
     assert!(ini.contains("SpoofNvidia = false"));
     assert!(ini.contains("Fsr2Pattern = true"));
-    assert!(ini.contains("LoadAsiPlugins = true"), "OptiPatcher should enable LoadAsiPlugins");
+    assert!(
+        ini.contains("LoadAsiPlugins = true"),
+        "OptiPatcher should enable LoadAsiPlugins"
+    );
 }
 
 #[test]
@@ -94,8 +120,14 @@ fn test_compatibility_database_lookups() {
     // 1. Star Wars Outlaws (Working in OptiScaler + Redstone with FG)
     let swo = lookup_compatibility("Star Wars Outlaws");
     assert_eq!(swo.opti_status, Some(OptiStatus::Working));
-    assert!(swo.fsr_redstone_supported, "Star Wars Outlaws must be in FSR Redstone catalog");
-    assert!(swo.fsr_redstone_native_fg, "Star Wars Outlaws has native Redstone Frame Gen");
+    assert!(
+        swo.fsr_redstone_supported,
+        "Star Wars Outlaws must be in FSR Redstone catalog"
+    );
+    assert!(
+        swo.fsr_redstone_native_fg,
+        "Star Wars Outlaws has native Redstone Frame Gen"
+    );
 
     // 2. Mortal Shell II (In both OptiScaler and Redstone)
     let ms2 = lookup_compatibility("Mortal Shell II");
@@ -194,7 +226,10 @@ fn test_manifest_uninstallation_clean_rollback() {
     assert!(!mod_patcher.exists(), "OptiPatcher.asi should be removed");
     assert!(!plugins_dir.exists(), "plugins dir should be cleaned up");
     assert!(!mod_d3d12.exists(), "D3D12Core.dll should be removed");
-    assert!(!d3d12_dir.exists(), "D3D12_Optiscaler dir should be cleaned up");
+    assert!(
+        !d3d12_dir.exists(),
+        "D3D12_Optiscaler dir should be cleaned up"
+    );
     assert!(!manifest_path.exists(), "Manifest should be removed");
 
     // Verify that original game files are untouched!
@@ -282,8 +317,164 @@ fn test_updater_dynamic_database_overlay() {
 
     // Verify lookup finds the newly injected dynamic entry
     let found = lookup_compatibility("Brand New Test Game 2026");
-    assert_eq!(found.opti_status, Some(fsroneclick::compatibility::OptiStatus::Working));
+    assert_eq!(
+        found.opti_status,
+        Some(fsroneclick::compatibility::OptiStatus::Working)
+    );
     assert!(found.optipatcher_supported);
     assert!(found.auto_exposure);
 }
 
+#[test]
+fn test_symbol_only_title_matches_no_dynamic_entry() {
+    use fsroneclick::compatibility::{load_dynamic_entries, lookup_compatibility};
+    use fsroneclick::updater::parse_raw_compatibility_md;
+
+    let md = r#"
+| Game | Compatibility | Inputs | OptiPatcher | Notes / Workarounds | Last Tested |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| [Brand New Test Game 2026](https://example.com) | ✅ Working | DLSS | ✨ Yes | Works perfectly with AutoExposure on. | v0.9.5 |
+| [™](https://example.com) | ✅ Working | DLSS | ❌ | Symbol-only title. | v0.9.5 |
+"#;
+    load_dynamic_entries(&parse_raw_compatibility_md(md));
+
+    // A title with no alphanumerics normalizes to "" and must not match any entry,
+    // including one whose own name also normalizes to "".
+    assert_eq!(lookup_compatibility("™ — ®").opti_status, None);
+}
+
+#[test]
+fn test_compat_substring_match_ignores_very_short_titles() {
+    use fsroneclick::compatibility::lookup_compatibility;
+
+    // "Tyr" and "'83" are real FSR Redstone titles; they must not match unrelated games by substring.
+    assert!(!lookup_compatibility("Party Rush Simulator 2099").fsr_redstone_supported);
+    assert!(!lookup_compatibility("Retro 1983 Racer").fsr_redstone_supported);
+    // Exact titles still match.
+    assert!(lookup_compatibility("Tyr").fsr_redstone_supported);
+}
+
+#[test]
+fn test_uninstall_ignores_manifest_entries_outside_game_folder() {
+    let root = std::env::temp_dir().join(format!("fsroneclick_traversal_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let game_dir = root.join("game");
+    fs::create_dir_all(&game_dir).unwrap();
+    let game_exe = game_dir.join("game.exe");
+    fs::write(&game_exe, b"exe").unwrap();
+    let victim = root.join("victim.txt");
+    fs::write(&victim, b"keep me").unwrap();
+    fs::write(
+        game_dir.join(MANIFEST_NAME),
+        format!("../victim.txt\n{}\n", victim.display()),
+    )
+    .unwrap();
+
+    let game_info = GameInfo {
+        title: "Test Game".to_string(),
+        path: game_dir.clone(),
+        exe_path: Some(game_exe),
+        store: Store::Custom,
+        app_id: None,
+        api: GraphicsApi::DirectX12,
+        is_64bit: true,
+        has_native_dlss: false,
+        is_re_engine: false,
+        anticheat: None,
+        fidelityfx_tier: None,
+        compat: Default::default(),
+    };
+    uninstall(&game_info).expect("Uninstall should succeed");
+
+    assert!(
+        victim.is_file(),
+        "uninstall must never delete files outside the game folder"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_install_refuses_32bit_games() {
+    use fsroneclick::installer::install;
+
+    let dir = std::env::temp_dir().join(format!("fsroneclick_32bit_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let game_exe = dir.join("game.exe");
+    fs::write(&game_exe, b"exe").unwrap();
+
+    let game_info = GameInfo {
+        title: "Old Game".to_string(),
+        path: dir.clone(),
+        exe_path: Some(game_exe),
+        store: Store::Custom,
+        app_id: None,
+        api: GraphicsApi::DirectX9,
+        is_64bit: false,
+        has_native_dlss: false,
+        is_re_engine: false,
+        anticheat: None,
+        fidelityfx_tier: None,
+        compat: Default::default(),
+    };
+    // Disable every downloadable component so the test never touches the network.
+    let config = InstallConfig {
+        enable_optiscaler: false,
+        enable_reshade: false,
+        enable_renodx: false,
+        enable_cas_sharpening: false,
+        ..InstallConfig::default()
+    };
+    let client = reqwest::blocking::Client::new();
+
+    let result = install(
+        &client,
+        &game_info,
+        &config,
+        &Arch::Unknown,
+        &HashMap::new(),
+        Box::new(|_, _| {}),
+    );
+
+    assert!(
+        result.is_err(),
+        "64-bit-only components must not be installed into a 32-bit game"
+    );
+    assert!(!dir.join(MANIFEST_NAME).exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_interrupted_download_leaves_no_partial_file() {
+    use std::io::{Read, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/OptiScaler.7z", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            // Promise 1000 bytes, then hang up after 7.
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\npartial");
+        }
+    });
+
+    let dir = std::env::temp_dir().join(format!("fsroneclick_download_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let dest = dir.join("OptiScaler.7z");
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    let result =
+        fsroneclick::net::download_with_progress(&client, &url, &dest, Box::new(|_, _| {}));
+
+    assert!(result.is_err());
+    assert!(
+        !dest.exists(),
+        "a truncated download must not be left where the cache would reuse it"
+    );
+    assert!(!dir.join("OptiScaler.7z.part").exists());
+    let _ = fs::remove_dir_all(&dir);
+}

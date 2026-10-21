@@ -38,7 +38,9 @@ fn main() -> Result<()> {
             run_check(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --check <game_path>");
+            eprintln!(
+                "Error: Missing game directory path.\nUsage: fsroneclick --check <game_path>"
+            );
             std::process::exit(1);
         }
     }
@@ -49,18 +51,25 @@ fn main() -> Result<()> {
             run_install_cli(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --install <game_path>");
+            eprintln!(
+                "Error: Missing game directory path.\nUsage: fsroneclick --install <game_path>"
+            );
             std::process::exit(1);
         }
     }
 
     if args.iter().any(|a| a == "--remove" || a == "--uninstall") {
-        let path = args.iter().skip(1).find(|a| *a != "--remove" && *a != "--uninstall");
+        let path = args
+            .iter()
+            .skip(1)
+            .find(|a| *a != "--remove" && *a != "--uninstall");
         if let Some(p) = path {
             run_uninstall_cli(p);
             return Ok(());
         } else {
-            eprintln!("Error: Missing game directory path.\nUsage: fsroneclick --remove <game_path>");
+            eprintln!(
+                "Error: Missing game directory path.\nUsage: fsroneclick --remove <game_path>"
+            );
             std::process::exit(1);
         }
     }
@@ -107,16 +116,26 @@ fn run_check_updates_cli() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Network error: {e}");
-            return;
+            std::process::exit(1);
         }
     };
     let report = fsroneclick::updater::check_all_updates(&client);
-    println!("\n{:<30} {:<18} {:<18} {:<8}", "Component", "Installed", "Latest Online", "Status");
+    println!(
+        "\n{:<30} {:<18} {:<18} {:<8}",
+        "Component", "Installed", "Latest Online", "Status"
+    );
     println!("{}", "-".repeat(78));
     for c in &report.components {
-        let status_str = if c.up_to_date { "Up to date" } else { "Update Available" };
+        let status_str = if c.up_to_date {
+            "Up to date"
+        } else {
+            "Update Available"
+        };
         let latest = c.latest_version.as_deref().unwrap_or("Unknown");
-        println!("{:<30} {:<18} {:<18} {:<8}", c.name, c.installed_version, latest, status_str);
+        println!(
+            "{:<30} {:<18} {:<18} {:<8}",
+            c.name, c.installed_version, latest, status_str
+        );
     }
     println!("\nTip: Run with --update-compat to fetch and cache the latest live compatibility database.");
 }
@@ -127,17 +146,21 @@ fn run_update_compat_cli() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Network error: {e}");
-            return;
+            std::process::exit(1);
         }
     };
     match fsroneclick::updater::fetch_and_cache_compatibility_db(&client) {
         Ok(db) => {
             println!("SUCCESS: Successfully updated compatibility database!");
             println!("Total games indexed: {}", db.total_entries);
-            println!("Cache location:      {}", fsroneclick::updater::cache_file_path().display());
+            println!(
+                "Cache location:      {}",
+                fsroneclick::updater::cache_file_path().display()
+            );
         }
         Err(e) => {
             eprintln!("Failed to update compatibility database: {e:#}");
+            std::process::exit(1);
         }
     }
 }
@@ -146,7 +169,10 @@ fn run_list_games() {
     println!("Scanning installed games across Steam, Epic Games, and Standalone (D:\\Games, C:\\Games)...");
     let games = game::scan_all_games();
     println!("Found {} games:\n", games.len());
-    println!("{:<30} {:<10} {:<11} {:<14} {:<14} {:<8}", "Game Title", "Store", "API", "OptiScaler", "AMD Redstone", "Status");
+    println!(
+        "{:<30} {:<10} {:<11} {:<14} {:<14} {:<8}",
+        "Game Title", "Store", "API", "OptiScaler", "AMD Redstone", "Status"
+    );
     println!("{}", "-".repeat(92));
 
     for g in games {
@@ -182,8 +208,9 @@ fn run_check(path_str: &str) {
     let p = PathBuf::from(path_str);
     if let Some(game) = game::from_custom_path(&p) {
         let gpu_info = gpu::detect_gpu();
-        let client = net::create_http_client().unwrap();
-        let catalog = renodx::fetch_mods_catalog(&client);
+        let catalog = net::create_http_client()
+            .map(|client| renodx::fetch_mods_catalog(&client))
+            .unwrap_or_default();
         let renodx_mod = renodx::match_game(&game.title, &catalog);
         let mod_status = game.check_mod_status();
 
@@ -198,30 +225,45 @@ fn run_check(path_str: &str) {
                 .map_or("None found".to_string(), |e| e.display().to_string())
         );
         println!("Graphics API:      {}", game.api.label());
-        println!("64-bit Binary:     {}", if game.is_64bit { "Yes" } else { "No (32-bit)" });
+        println!(
+            "64-bit Binary:     {}",
+            if game.is_64bit { "Yes" } else { "No (32-bit)" }
+        );
         println!(
             "AMD FidelityFX:    {}",
             game.fidelityfx_tier
                 .as_ref()
-                .map_or("None (Pre-FSR / OptiScaler recommended)".to_string(), |t| t.label().to_string())
+                .map_or("None (Pre-FSR / OptiScaler recommended)".to_string(), |t| t
+                    .label()
+                    .to_string())
         );
         println!(
             "OptiScaler Wiki:   {}",
-            game.compat.opti_status.map_or("Untested (Generic Proxy Mode)".to_string(), |s| {
-                format!(
-                    "{} (Inputs: {}){}",
-                    s.as_str(),
-                    game.compat.opti_inputs.as_deref().unwrap_or("N/A"),
-                    if game.compat.optipatcher_supported { " [OptiPatcher ✨]" } else { "" }
-                )
-            })
+            game.compat
+                .opti_status
+                .map_or("Untested (Generic Proxy Mode)".to_string(), |s| {
+                    format!(
+                        "{} (Inputs: {}){}",
+                        s.as_str(),
+                        game.compat.opti_inputs.as_deref().unwrap_or("N/A"),
+                        if game.compat.optipatcher_supported {
+                            " [OptiPatcher ✨]"
+                        } else {
+                            ""
+                        }
+                    )
+                })
         );
         println!(
             "AMD FSR Redstone:  {}",
             if game.compat.fsr_redstone_supported {
                 format!(
                     "Supported (RX 7000 Series Driver 26.6.2+ ready){}",
-                    if game.compat.fsr_redstone_native_fg { " [Native FG on RX 9000]" } else { "" }
+                    if game.compat.fsr_redstone_native_fg {
+                        " [Native FG on RX 9000]"
+                    } else {
+                        ""
+                    }
                 )
             } else {
                 "Standard FSR 3.1 / 2.x".to_string()
@@ -235,11 +277,19 @@ fn run_check(path_str: &str) {
         }
         println!(
             "Native DLSS:       {}",
-            if game.has_native_dlss { "Detected" } else { "Not Present" }
+            if game.has_native_dlss {
+                "Detected"
+            } else {
+                "Not Present"
+            }
         );
         println!(
             "Capcom RE Engine:  {}",
-            if game.is_re_engine { "Yes (REFramework required)" } else { "No" }
+            if game.is_re_engine {
+                "Yes (REFramework required)"
+            } else {
+                "No"
+            }
         );
         println!(
             "Anti-Cheat:        {}",
@@ -254,7 +304,11 @@ fn run_check(path_str: &str) {
         );
         println!(
             "Mod Status:        {}",
-            if mod_status.is_optiscaler_installed { "Installed" } else { "Stock" }
+            if mod_status.is_optiscaler_installed {
+                "Installed"
+            } else {
+                "Stock"
+            }
         );
 
         if let Some(g) = gpu_info {
@@ -264,29 +318,41 @@ fn run_check(path_str: &str) {
         }
     } else {
         eprintln!("Could not analyze game at path: {path_str}");
+        std::process::exit(1);
     }
 }
 
 fn run_install_cli(path_str: &str) {
     let p = PathBuf::from(path_str);
     let Some(game) = game::from_custom_path(&p) else {
-        eprintln!("Error: Target path {} is not a valid game directory.", path_str);
-        return;
+        eprintln!(
+            "Error: Target path {} is not a valid game directory.",
+            path_str
+        );
+        std::process::exit(1);
     };
 
     let client = match net::create_http_client() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Network error: {e}");
-            return;
+            std::process::exit(1);
         }
     };
 
     let gpu_info = gpu::detect_gpu();
-    let gpu_arch = gpu_info.as_ref().map(|g| g.arch.clone()).unwrap_or(gpu::Arch::Unknown);
+    let gpu_arch = gpu_info
+        .as_ref()
+        .map(|g| g.arch.clone())
+        .unwrap_or(gpu::Arch::Unknown);
     let catalog = renodx::fetch_mods_catalog(&client);
     let config = installer::InstallConfig::default();
 
+    if let Some(anticheat) = game.anticheat {
+        eprintln!(
+            "Warning: {anticheat} detected. Only use these mods offline or in single-player; anti-cheat can flag injected DLLs and ban accounts."
+        );
+    }
     println!("Installing enhancements for {}...", game.title);
     let progress_fn = Box::new(|pct: f32, msg: &str| {
         println!("[{:>3.0}%] {}", pct * 100.0, msg);
@@ -294,13 +360,18 @@ fn run_install_cli(path_str: &str) {
 
     match installer::install(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
         Ok(files) => {
-            println!("\nSUCCESS: Staged {} components in {}:", files.len(), game.path.display());
+            println!(
+                "\nSUCCESS: Staged {} components in {}:",
+                files.len(),
+                game.path.display()
+            );
             for f in files {
                 println!("  + {}", f);
             }
         }
         Err(e) => {
             eprintln!("\nInstallation failed: {e:#}");
+            std::process::exit(1);
         }
     }
 }
@@ -308,8 +379,11 @@ fn run_install_cli(path_str: &str) {
 fn run_uninstall_cli(path_str: &str) {
     let p = PathBuf::from(path_str);
     let Some(game) = game::from_custom_path(&p) else {
-        eprintln!("Error: Target path {} is not a valid game directory.", path_str);
-        return;
+        eprintln!(
+            "Error: Target path {} is not a valid game directory.",
+            path_str
+        );
+        std::process::exit(1);
     };
 
     println!("Rolling back enhancements for {}...", game.title);
@@ -323,6 +397,7 @@ fn run_uninstall_cli(path_str: &str) {
         }
         Err(e) => {
             eprintln!("\nRollback failed: {e:#}");
+            std::process::exit(1);
         }
     }
 }

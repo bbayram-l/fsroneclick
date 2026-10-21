@@ -158,7 +158,8 @@ impl FidelityFxCatalog {
 
         for title in fsr1_games {
             // Don't overwrite higher tier if already present
-            map.entry(normalize_title(title)).or_insert(FidelityFxTier::Fsr1);
+            map.entry(normalize_title(title))
+                .or_insert(FidelityFxTier::Fsr1);
         }
 
         Self { games: map }

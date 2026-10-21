@@ -2,6 +2,7 @@
 name = "fsroneclick"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 authors = ["FSRoneclick Contributors"]
 description = "One-click deployment of AMD FSR (3.1 / 4.1.1 Redstone + Frame Generation), OptiScaler, ReShade, RenoDX HDR, and Anti-Lag 2 for AMD Radeon & Universal GPUs"
 license = "MIT"
@@ -21,7 +22,6 @@ sevenz-rust = "0.6"
 windows-sys = { version = "0.59", features = ["Win32_System_Registry"] }
 regex = "1.10"
 anyhow = "1.0"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [profile.release]
 opt-level = 3

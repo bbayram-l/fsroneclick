@@ -2,12 +2,11 @@
 
 use regex::Regex;
 use reqwest::blocking::Client;
+use reqwest::Url;
 use std::collections::HashMap;
 
 pub const RENODX_WIKI_MODS: &str =
     "https://raw.githubusercontent.com/wiki/clshortfuse/renodx/Mods.md";
-pub const RENODX_SNAPSHOT_BASE: &str =
-    "https://github.com/clshortfuse/renodx/releases/download/snapshot/";
 
 #[derive(Debug, Clone)]
 pub struct RenoDxMod {
@@ -25,19 +24,27 @@ pub fn normalize_title(title: &str) -> String {
 }
 
 /// Fetches the latest RenoDX game mods catalog from the official wiki.
+/// Returns an empty catalog when the wiki cannot be reached.
 pub fn fetch_mods_catalog(client: &Client) -> HashMap<String, RenoDxMod> {
-    let mut catalog = get_fallback_catalog();
+    client
+        .get(RENODX_WIKI_MODS)
+        .send()
+        .and_then(|resp| resp.error_for_status())
+        .and_then(|resp| resp.text())
+        .map(|text| parse_mods_catalog(&text))
+        .unwrap_or_default()
+}
 
-    let Ok(resp) = client.get(RENODX_WIKI_MODS).send() else {
-        return catalog;
-    };
-    let Ok(text) = resp.text() else {
-        return catalog;
-    };
-
+/// Parses the RenoDX wiki `Mods.md` table into a catalog keyed by normalized title.
+///
+/// The wiki is community-maintained and the add-ons are loaded into the game process, so rows
+/// are only accepted when the download is HTTPS from GitHub (where every RenoDX mod is hosted)
+/// and the file name is a plain `*.addon64` name that cannot point outside the game folder.
+pub fn parse_mods_catalog(markdown: &str) -> HashMap<String, RenoDxMod> {
+    let mut catalog = HashMap::new();
     let re_row = Regex::new(r"\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*\[!\[[^\]]*\]\([^)]*\)\]\(([^)]+\.addon64)\)\s*\|\s*([^|]*)\|").unwrap();
 
-    for cap in re_row.captures_iter(&text) {
+    for cap in re_row.captures_iter(markdown) {
         let raw_title = cap[1].trim();
         // Strip markdown links if present in title [Title](url)
         let clean_title = if let Some(start) = raw_title.find('[') {
@@ -51,11 +58,9 @@ pub fn fetch_mods_catalog(client: &Client) -> HashMap<String, RenoDxMod> {
         };
 
         let url = cap[3].trim().to_string();
-        let filename = url
-            .split('/')
-            .last()
-            .unwrap_or("renodx.addon64")
-            .to_string();
+        let Some(filename) = github_addon_file_name(&url) else {
+            continue;
+        };
         let notes = cap.get(4).map(|m| m.as_str().trim().to_string());
 
         let norm = normalize_title(clean_title);
@@ -71,6 +76,44 @@ pub fn fetch_mods_catalog(client: &Client) -> HashMap<String, RenoDxMod> {
     }
 
     catalog
+}
+
+/// Returns the add-on's file name when `url` is an HTTPS download from GitHub.
+///
+/// The URL is checked with the parser the HTTP client uses, so the host that is checked is the
+/// host that gets contacted. Userinfo, ports, queries, fragments, and backslashes (which URL
+/// parsers disagree about) are rejected outright.
+fn github_addon_file_name(url: &str) -> Option<String> {
+    if url.contains('\\') {
+        return None;
+    }
+    let parsed = Url::parse(url).ok()?;
+    if parsed.scheme() != "https"
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.port().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    let host = parsed
+        .host_str()?
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if host != "github.com" && !host.ends_with(".github.io") {
+        return None;
+    }
+    let name = parsed.path_segments()?.next_back()?;
+    is_plain_addon_name(name).then(|| name.to_string())
+}
+
+fn is_plain_addon_name(name: &str) -> bool {
+    name.ends_with(".addon64")
+        && !name.starts_with('.')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Matches a game title to a RenoDX mod if one exists.
@@ -96,47 +139,4 @@ pub fn match_game<'a>(
     }
 
     None
-}
-
-/// Provides a curated offline fallback catalog of popular RenoDX supported games.
-fn get_fallback_catalog() -> HashMap<String, RenoDxMod> {
-    let mut map = HashMap::new();
-
-    let list = [
-        ("Cyberpunk 2077", "renodx-cyberpunk2077.addon64"),
-        ("The Witcher 3", "renodx-witcher3.addon64"),
-        ("Alan Wake 2", "renodx-alanwake2.addon64"),
-        ("Dragon's Dogma 2", "renodx-dragonsdogma2.addon64"),
-        ("Baldur's Gate 3", "renodx-baldursgate3.addon64"),
-        ("Starfield", "renodx-starfield.addon64"),
-        ("Black Myth: Wukong", "renodx-blackmythwukong.addon64"),
-        ("Hogwarts Legacy", "renodx-hogwartslegacy.addon64"),
-        ("Elden Ring", "renodx-eldenring.addon64"),
-        ("Armored Core VI", "renodx-armoredcore6.addon64"),
-        ("Ghost of Tsushima", "renodx-ghostoftsushima.addon64"),
-        ("Horizon Forbidden West", "renodx-horizonforbiddenwest.addon64"),
-        ("God of War Ragnarok", "renodx-godofwarragnarok.addon64"),
-        ("Lies of P", "renodx-liesofp.addon64"),
-        ("Final Fantasy VII Rebirth", "renodx-ff7rebirth.addon64"),
-        ("Final Fantasy XVI", "renodx-ff16.addon64"),
-        ("Palworld", "renodx-palworld.addon64"),
-        ("Helldivers 2", "renodx-helldivers2.addon64"),
-        ("Resident Evil 4", "renodx-re4.addon64"),
-        ("Resident Evil Village", "renodx-re8.addon64"),
-    ];
-
-    for (title, file) in list {
-        let norm = normalize_title(title);
-        map.insert(
-            norm,
-            RenoDxMod {
-                game_title: title.to_string(),
-                filename: file.to_string(),
-                download_url: format!("{RENODX_SNAPSHOT_BASE}{file}"),
-                notes: Some("Official RenoDX HDR mod".to_string()),
-            },
-        );
-    }
-
-    map
 }

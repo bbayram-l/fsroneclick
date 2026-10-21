@@ -59,7 +59,11 @@ pub struct CompatibilityProfile {
 }
 
 pub fn normalize_title(title: &str) -> String {
-    title.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+    title
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 static OPTISCALER_COMPAT_DB: &[OptiCompatEntry] = &[
@@ -11913,7 +11917,6 @@ static FSR_REDSTONE_DB: &[FsrRedstoneEntry] = &[
     },
 ];
 
-
 use std::sync::RwLock;
 
 static DYNAMIC_ENTRIES: RwLock<Vec<crate::updater::CachedCompatEntry>> = RwLock::new(Vec::new());
@@ -11923,6 +11926,16 @@ pub fn load_dynamic_entries(entries: &[crate::updater::CachedCompatEntry]) {
     if let Ok(mut dyn_entries) = DYNAMIC_ENTRIES.write() {
         *dyn_entries = entries.to_vec();
     }
+}
+
+/// Shortest normalized title that may match by substring. Shorter titles ("Tyr", "'83") only
+/// match exactly, otherwise they would match every game whose name happens to contain them.
+const MIN_SUBSTRING_MATCH_LEN: usize = 4;
+
+/// Whether one normalized title contains the other, ignoring trivially short titles.
+fn titles_overlap(a: &str, b: &str) -> bool {
+    let (shorter, longer) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    shorter.chars().count() >= MIN_SUBSTRING_MATCH_LEN && longer.contains(shorter)
 }
 
 /// Look up an OptiScaler community compatibility entry by title.
@@ -11936,9 +11949,9 @@ pub fn lookup_optiscaler(title: &str) -> Option<&'static OptiCompatEntry> {
         return Some(entry);
     }
     // Substring match
-    OPTISCALER_COMPAT_DB.iter().find(|e| {
-        !e.norm_name.is_empty() && (norm.contains(e.norm_name) || e.norm_name.contains(&norm))
-    })
+    OPTISCALER_COMPAT_DB
+        .iter()
+        .find(|e| titles_overlap(&norm, e.norm_name))
 }
 
 /// Look up an AMD FSR "Redstone" (FSR 4) entry by title.
@@ -11952,9 +11965,9 @@ pub fn lookup_redstone(title: &str) -> Option<&'static FsrRedstoneEntry> {
         return Some(entry);
     }
     // Substring match
-    FSR_REDSTONE_DB.iter().find(|e| {
-        !e.norm_title.is_empty() && (norm.contains(e.norm_title) || e.norm_title.contains(&norm))
-    })
+    FSR_REDSTONE_DB
+        .iter()
+        .find(|e| titles_overlap(&norm, e.norm_title))
 }
 
 /// Generate a full compatibility profile combining OptiScaler & AMD FSR Redstone.
@@ -11963,20 +11976,22 @@ pub fn lookup_compatibility(title: &str) -> CompatibilityProfile {
 
     // 1. Check live/cached dynamic entries first
     if let Ok(guard) = DYNAMIC_ENTRIES.read() {
-        if !guard.is_empty() {
-            if let Some(entry) = guard.iter().find(|e| {
-                e.norm_name == norm
-                    || (!e.norm_name.is_empty() && (norm.contains(&e.norm_name) || e.norm_name.contains(&norm)))
-            }) {
+        if !norm.is_empty() {
+            if let Some(entry) = guard
+                .iter()
+                .find(|e| e.norm_name == norm || titles_overlap(&norm, &e.norm_name))
+            {
                 let status = match entry.status.as_str() {
                     "Working" => OptiStatus::Working,
                     "NotWorking" => OptiStatus::NotWorking,
                     _ => OptiStatus::Partial,
                 };
-                let mut profile = CompatibilityProfile::default();
-                profile.opti_status = Some(status);
-                profile.opti_inputs = Some(entry.inputs.clone());
-                profile.optipatcher_supported = entry.optipatcher;
+                let mut profile = CompatibilityProfile {
+                    opti_status: Some(status),
+                    opti_inputs: Some(entry.inputs.clone()),
+                    optipatcher_supported: entry.optipatcher,
+                    ..Default::default()
+                };
                 if !entry.notes.is_empty() {
                     profile.opti_notes = Some(entry.notes.clone());
                 }
@@ -12032,4 +12047,3 @@ pub fn lookup_compatibility(title: &str) -> CompatibilityProfile {
 
     profile
 }
-

@@ -22,12 +22,15 @@ pub fn cache_dir() -> PathBuf {
 
 pub fn create_http_client() -> Result<Client> {
     Client::builder()
-        .user_agent("FSRoneclick-Installer/1.0")
+        .user_agent(concat!("FSRoneclick/", env!("CARGO_PKG_VERSION")))
         .build()
         .context("Failed to build HTTP client")
 }
 
 /// Downloads a URL to a specified file, reporting progress.
+///
+/// Data is streamed into `<dest>.part` and only renamed to `dest` once complete, so an
+/// interrupted download is never mistaken for a valid cached file.
 pub fn download_with_progress(
     client: &Client,
     url: &str,
@@ -38,6 +41,29 @@ pub fn download_with_progress(
         fs::create_dir_all(parent)?;
     }
 
+    let mut partial = dest.as_os_str().to_owned();
+    partial.push(".part");
+    let partial = PathBuf::from(partial);
+
+    let finished = stream_to_file(client, url, &partial, &mut progress).and_then(|()| {
+        fs::rename(&partial, dest)
+            .with_context(|| format!("Failed to finalize download {}", dest.display()))
+    });
+    if let Err(e) = finished {
+        let _ = fs::remove_file(&partial);
+        return Err(e);
+    }
+
+    progress(1.0, "Download completed");
+    Ok(())
+}
+
+fn stream_to_file(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    progress: &mut ProgressCallback,
+) -> Result<()> {
     progress(0.0, &format!("Connecting to {url}"));
     let mut resp = client.get(url).send()?.error_for_status()?;
 
@@ -71,8 +97,6 @@ pub fn download_with_progress(
             );
         }
     }
-
-    progress(1.0, "Download completed");
     Ok(())
 }
 
@@ -151,5 +175,7 @@ pub fn get_github_latest_asset_url(
         }
     }
 
-    Err(anyhow!("No asset with extension {extension} found in {owner_repo}"))
+    Err(anyhow!(
+        "No asset with extension {extension} found in {owner_repo}"
+    ))
 }

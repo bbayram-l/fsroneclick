@@ -70,11 +70,7 @@ pub fn detect_gpu() -> Option<GpuInfo> {
             return None;
         }
         let n = (size as usize / 2).saturating_sub(1).min(buf.len());
-        Some(
-            String::from_utf16_lossy(&buf[..n])
-                .trim()
-                .to_owned(),
-        )
+        Some(String::from_utf16_lossy(&buf[..n]).trim().to_owned())
     }
 
     let base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
@@ -134,7 +130,10 @@ pub fn detect_gpu() -> Option<GpuInfo> {
             Arch::OtherAmd
         } else if desc_lower.contains("arc") || desc_lower.contains("intel") {
             Arch::IntelArc
-        } else if desc_lower.contains("geforce") || desc_lower.contains("rtx") || desc_lower.contains("gtx") {
+        } else if desc_lower.contains("geforce")
+            || desc_lower.contains("rtx")
+            || desc_lower.contains("gtx")
+        {
             Arch::Nvidia
         } else {
             Arch::Unknown
@@ -184,13 +183,7 @@ pub fn set_high_performance_preference(exe_path: &std::path::Path) -> bool {
         .collect();
 
     let mut key: HKEY = std::ptr::null_mut();
-    let res = unsafe {
-        RegCreateKeyW(
-            HKEY_CURRENT_USER,
-            subkey.as_ptr(),
-            &mut key,
-        )
-    };
+    let res = unsafe { RegCreateKeyW(HKEY_CURRENT_USER, subkey.as_ptr(), &mut key) };
 
     if res != 0 {
         return false;

@@ -141,7 +141,9 @@ impl GameInfo {
         }
 
         // 3. Check for ReShade
-        if !status.is_reshade_installed && (dir.join(RESHADE_DLL).is_file() || dir.join("ReShade.ini").is_file()) {
+        if !status.is_reshade_installed
+            && (dir.join(RESHADE_DLL).is_file() || dir.join("ReShade.ini").is_file())
+        {
             status.is_reshade_installed = true;
         }
 
@@ -169,26 +171,36 @@ pub fn scan_all_games() -> Vec<GameInfo> {
 
     // 1. Scan Standalone / Non-Steam Games (e.g. D:\Games, C:\Games)
     for g in scan_standalone_games() {
-        if seen_paths.insert(g.path.clone()) {
+        if seen_paths.insert(path_key(&g.path)) {
             games.push(g);
         }
     }
 
     // 2. Scan Steam
     for g in scan_steam_games() {
-        if seen_paths.insert(g.path.clone()) {
+        if seen_paths.insert(path_key(&g.path)) {
             games.push(g);
         }
     }
 
     // 3. Scan Epic
     for g in scan_epic_games() {
-        if seen_paths.insert(g.path.clone()) {
+        if seen_paths.insert(path_key(&g.path)) {
             games.push(g);
         }
     }
 
     games
+}
+
+/// Comparison key for Windows paths, which ignore case and accept either separator. Steam's
+/// registry value (`c:/program files (x86)/steam`) and its library list
+/// (`C:\Program Files (x86)\Steam`) name the same folder differently.
+fn path_key(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_lowercase()
 }
 
 /// Scans standalone game directories such as D:\Games, C:\Games, E:\Games.
@@ -207,13 +219,19 @@ pub fn scan_standalone_games() -> Vec<GameInfo> {
         if !root.is_dir() {
             continue;
         }
-        let Ok(entries) = fs::read_dir(&root) else { continue };
+        let Ok(entries) = fs::read_dir(&root) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let p = entry.path();
             if !p.is_dir() {
                 continue;
             }
-            let dir_name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let dir_name = p
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             if dir_name.starts_with('$')
                 || dir_name.starts_with('.')
                 || dir_name.eq_ignore_ascii_case("recycle.bin")
@@ -225,7 +243,9 @@ pub fn scan_standalone_games() -> Vec<GameInfo> {
             if let Some(exe) = find_main_exe(&p) {
                 let (api, is_64, dlss) = inspect_binary(&exe);
                 let is_re = p.join("re_chunk_000.pak").is_file()
-                    || exe.parent().map_or(false, |par| par.join("re_chunk_000.pak").is_file());
+                    || exe
+                        .parent()
+                        .is_some_and(|par| par.join("re_chunk_000.pak").is_file());
                 let anticheat = detect_anticheat(&p);
                 let ffx_tier = ffx_catalog.check_game(&dir_name, exe.parent().unwrap_or(&p));
                 let compat = crate::compatibility::lookup_compatibility(&dir_name);
@@ -255,12 +275,15 @@ pub fn scan_standalone_games() -> Vec<GameInfo> {
 pub fn scan_steam_games() -> Vec<GameInfo> {
     let mut games = Vec::new();
     let ffx_catalog = FidelityFxCatalog::new();
-    let common_steam_dirs = [
-        PathBuf::from(r"C:\Program Files (x86)\Steam"),
-        PathBuf::from(r"C:\Steam"),
-        PathBuf::from(r"D:\Steam"),
-        PathBuf::from(r"E:\Steam"),
-    ];
+    let common_steam_dirs: Vec<PathBuf> = steam_dir_from_registry()
+        .into_iter()
+        .chain([
+            PathBuf::from(r"C:\Program Files (x86)\Steam"),
+            PathBuf::from(r"C:\Steam"),
+            PathBuf::from(r"D:\Steam"),
+            PathBuf::from(r"E:\Steam"),
+        ])
+        .collect();
 
     let mut library_paths = Vec::new();
     for steam_dir in &common_steam_dirs {
@@ -275,7 +298,9 @@ pub fn scan_steam_games() -> Vec<GameInfo> {
                             let rest = &trimmed[start + 6..].trim();
                             let clean = rest.trim_matches(|c| c == '"' || c == '\t' || c == ' ');
                             let p = PathBuf::from(clean.replace("\\\\", "\\")).join("steamapps");
-                            if p.is_dir() && !library_paths.contains(&p) {
+                            if p.is_dir()
+                                && !library_paths.iter().any(|l| path_key(l) == path_key(&p))
+                            {
                                 library_paths.push(p);
                             }
                         }
@@ -292,11 +317,15 @@ pub fn scan_steam_games() -> Vec<GameInfo> {
             continue;
         }
 
-        let Ok(manifests) = fs::read_dir(&lib) else { continue };
+        let Ok(manifests) = fs::read_dir(&lib) else {
+            continue;
+        };
         for entry in manifests.flatten() {
             let fname = entry.file_name().to_string_lossy().to_string();
             if fname.starts_with("appmanifest_") && fname.ends_with(".acf") {
-                let Ok(acf) = fs::read_to_string(entry.path()) else { continue };
+                let Ok(acf) = fs::read_to_string(entry.path()) else {
+                    continue;
+                };
                 let app_id = extract_vdf_key(&acf, "appid");
                 let name = extract_vdf_key(&acf, "name");
                 let installdir = extract_vdf_key(&acf, "installdir");
@@ -312,8 +341,9 @@ pub fn scan_steam_games() -> Vec<GameInfo> {
                         };
 
                         let is_re = game_dir.join("re_chunk_000.pak").is_file()
-                            || exe.as_ref().map_or(false, |e| {
-                                e.parent().map_or(false, |p| p.join("re_chunk_000.pak").is_file())
+                            || exe.as_ref().is_some_and(|e| {
+                                e.parent()
+                                    .is_some_and(|p| p.join("re_chunk_000.pak").is_file())
                             });
 
                         let anticheat = detect_anticheat(&game_dir);
@@ -346,16 +376,58 @@ pub fn scan_steam_games() -> Vec<GameInfo> {
     games
 }
 
+/// Reads the Steam install folder that the Steam client records in the registry.
+#[cfg(windows)]
+fn steam_dir_from_registry() -> Option<PathBuf> {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+
+    let wide = |s: &str| {
+        s.encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>()
+    };
+    let subkey = wide(r"Software\Valve\Steam");
+    let value = wide("SteamPath");
+    let mut buf = [0u16; 512];
+    let mut size = (buf.len() * 2) as u32;
+    // SAFETY: `subkey` and `value` are NUL-terminated UTF-16 strings, and `size` is the byte
+    // capacity of `buf`, which RegGetValueW never writes past.
+    let rc = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            buf.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    if rc != 0 {
+        return None;
+    }
+    let len = (size as usize / 2).saturating_sub(1).min(buf.len());
+    let path = String::from_utf16_lossy(&buf[..len]);
+    (!path.trim().is_empty()).then(|| PathBuf::from(path.trim().replace('/', "\\")))
+}
+
+#[cfg(not(windows))]
+fn steam_dir_from_registry() -> Option<PathBuf> {
+    None
+}
+
 /// Scans Epic Games Launcher manifests.
 pub fn scan_epic_games() -> Vec<GameInfo> {
     let mut games = Vec::new();
     let ffx_catalog = FidelityFxCatalog::new();
     let manifests_dir = PathBuf::from(r"C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests");
-    let Ok(entries) = fs::read_dir(manifests_dir) else { return games };
+    let Ok(entries) = fs::read_dir(manifests_dir) else {
+        return games;
+    };
 
     for entry in entries.flatten() {
         let p = entry.path();
-        if p.extension().map_or(false, |ext| ext == "item") {
+        if p.extension().is_some_and(|ext| ext == "item") {
             if let Ok(content) = fs::read_to_string(&p) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     let title = json["DisplayName"].as_str().map(|s| s.to_string());
@@ -374,7 +446,9 @@ pub fn scan_epic_games() -> Vec<GameInfo> {
                             let anticheat = detect_anticheat(&install_loc);
                             let ffx_tier = ffx_catalog.check_game(
                                 &title,
-                                exe.as_ref().and_then(|e| e.parent()).unwrap_or(&install_loc),
+                                exe.as_ref()
+                                    .and_then(|e| e.parent())
+                                    .unwrap_or(&install_loc),
                             );
                             let compat = crate::compatibility::lookup_compatibility(&title);
 
@@ -413,36 +487,43 @@ fn is_subfolder_name(name: &str) -> bool {
 
 /// Creates a `GameInfo` for an arbitrary user-selected folder or exe, resolving subdirectories like `Far Cry 5\bin`.
 pub fn from_custom_path(path: &Path) -> Option<GameInfo> {
-    let (game_dir, exe_path, title) = if path.is_file() && path.extension().map_or(false, |e| e == "exe") {
-        let parent = path.parent().unwrap_or(path);
-        let parent_name = parent.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let title = if is_subfolder_name(&parent_name) {
-            parent
-                .parent()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(parent_name)
-        } else {
-            parent_name
-        };
-        (parent.to_path_buf(), Some(path.to_path_buf()), title)
-    } else if path.is_dir() {
-        let dir_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let (root_dir, title) = if is_subfolder_name(&dir_name) {
+    let (game_dir, exe_path, title) =
+        if path.is_file() && path.extension().is_some_and(|e| e == "exe") {
             let parent = path.parent().unwrap_or(path);
             let parent_name = parent
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| dir_name.clone());
-            (path.to_path_buf(), parent_name)
+                .unwrap_or_default();
+            let title = if is_subfolder_name(&parent_name) {
+                parent
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or(parent_name)
+            } else {
+                parent_name
+            };
+            (parent.to_path_buf(), Some(path.to_path_buf()), title)
+        } else if path.is_dir() {
+            let dir_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let (root_dir, title) = if is_subfolder_name(&dir_name) {
+                let parent = path.parent().unwrap_or(path);
+                let parent_name = parent
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| dir_name.clone());
+                (path.to_path_buf(), parent_name)
+            } else {
+                (path.to_path_buf(), dir_name)
+            };
+            let exe = find_main_exe(path);
+            (root_dir, exe, title)
         } else {
-            (path.to_path_buf(), dir_name)
+            return None;
         };
-        let exe = find_main_exe(path);
-        (root_dir, exe, title)
-    } else {
-        return None;
-    };
 
     let (api, is_64, dlss) = if let Some(ref e) = exe_path {
         inspect_binary(e)
@@ -451,15 +532,19 @@ pub fn from_custom_path(path: &Path) -> Option<GameInfo> {
     };
 
     let is_re = game_dir.join("re_chunk_000.pak").is_file()
-        || exe_path.as_ref().map_or(false, |e| {
-            e.parent().map_or(false, |p| p.join("re_chunk_000.pak").is_file())
+        || exe_path.as_ref().is_some_and(|e| {
+            e.parent()
+                .is_some_and(|p| p.join("re_chunk_000.pak").is_file())
         });
 
     let anticheat = detect_anticheat(&game_dir);
     let ffx_catalog = FidelityFxCatalog::new();
     let ffx_tier = ffx_catalog.check_game(
         &title,
-        exe_path.as_ref().and_then(|e| e.parent()).unwrap_or(&game_dir),
+        exe_path
+            .as_ref()
+            .and_then(|e| e.parent())
+            .unwrap_or(&game_dir),
     );
     let compat = crate::compatibility::lookup_compatibility(&title);
 
@@ -484,7 +569,10 @@ fn extract_vdf_key(vdf: &str, key: &str) -> Option<String> {
     for line in vdf.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with(&pattern) {
-            let parts: Vec<&str> = trimmed.split('"').filter(|p| !p.trim().is_empty()).collect();
+            let parts: Vec<&str> = trimmed
+                .split('"')
+                .filter(|p| !p.trim().is_empty())
+                .collect();
             if parts.len() >= 2 {
                 return Some(parts[1].to_string());
             }
@@ -506,7 +594,11 @@ pub fn find_main_exe(dir: &Path) -> Option<PathBuf> {
     let filtered: Vec<PathBuf> = candidates
         .into_iter()
         .filter(|p| {
-            let name = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            let name = p
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase();
             let parent_name = p
                 .parent()
                 .and_then(|par| par.file_name())
@@ -542,14 +634,19 @@ pub fn find_main_exe(dir: &Path) -> Option<PathBuf> {
 
     // 1. Prefer Shipping or Win64 exes (Unreal Engine convention)
     if let Some(shipping) = filtered.iter().find(|p| {
-        let n = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+        let n = p
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
         n.contains("-shipping") || n.contains("win64")
     }) {
         return Some(shipping.clone());
     }
 
     // 2. Check if an exe name closely matches the root game folder name (e.g. FarCry5.exe matches Far Cry 5)
-    let folder_norm = crate::renodx::normalize_title(&dir.file_name().unwrap_or_default().to_string_lossy());
+    let folder_norm =
+        crate::renodx::normalize_title(&dir.file_name().unwrap_or_default().to_string_lossy());
     if let Some(matching) = filtered.iter().find(|p| {
         let exe_stem = p.file_stem().unwrap_or_default().to_string_lossy();
         let stem_norm = crate::renodx::normalize_title(&exe_stem);
@@ -565,7 +662,7 @@ pub fn find_main_exe(dir: &Path) -> Option<PathBuf> {
     if let Some(bin_exe) = filtered.iter().find(|p| {
         p.parent()
             .and_then(|par| par.file_name())
-            .map_or(false, |n| n.to_string_lossy().eq_ignore_ascii_case("bin"))
+            .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case("bin"))
     }) {
         return Some(bin_exe.clone());
     }
@@ -580,7 +677,9 @@ fn find_exes_recursive(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec
     if depth > max_depth {
         return;
     }
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let p = entry.path();
         if p.is_file() {
@@ -590,7 +689,11 @@ fn find_exes_recursive(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec
                 }
             }
         } else if p.is_dir() {
-            let name = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            let name = p
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase();
             if name != "directx"
                 && name != "redist"
                 && name != "_redist"
@@ -659,7 +762,8 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
     let is_64bit = machine == 0x8664 || machine == 0xAA64; // AMD64 or ARM64
 
     let contains_ci = |needle: &[u8]| -> bool {
-        data.windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
+        data.windows(needle.len())
+            .any(|w| w.eq_ignore_ascii_case(needle))
     };
 
     let mut imported_d3d12 = contains_ci(b"d3d12.dll") || has_d3d12_agility;
@@ -677,7 +781,11 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.is_file() {
-                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                    let name = p
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_lowercase();
                     if name.ends_with("_m64.dll")
                         || name == "unityplayer.dll"
                         || name == "d3dcompiler_47.dll"
@@ -688,7 +796,9 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
                             let comp_read = comp_file.read(&mut comp_buf).unwrap_or(0);
                             let comp_data = &comp_buf[..comp_read];
                             let comp_ci = |needle: &[u8]| {
-                                comp_data.windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
+                                comp_data
+                                    .windows(needle.len())
+                                    .any(|w| w.eq_ignore_ascii_case(needle))
                             };
                             if comp_ci(b"d3d12.dll") {
                                 imported_d3d12 = true;

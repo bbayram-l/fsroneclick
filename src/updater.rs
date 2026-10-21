@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-pub const CURRENT_APP_VERSION: &str = "v0.1.0";
+pub const CURRENT_APP_VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 pub const CURRENT_OPTISCALER_VERSION: &str = "v0.9.4";
-pub const CURRENT_RESHADE_VERSION: &str = "v6.3.3 (Addon)";
+/// Must match the build pinned in `installer::RESHADE_ADDON_SETUP_URL`.
+pub const CURRENT_RESHADE_VERSION: &str = "v6.4.1 (Addon)";
 pub const COMPAT_WIKI_RAW_URL: &str =
     "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md";
 pub const OPTISCALER_RELEASES_API: &str =
@@ -128,7 +129,12 @@ pub fn parse_raw_compatibility_md(markdown: &str) -> Vec<CachedCompatEntry> {
                 if let Some(end) = notes_clean[mid_idx..].find(')') {
                     let end_idx = mid_idx + end;
                     let link_text = &notes_clean[start + 1..mid_idx];
-                    notes_clean = format!("{}{}{}", &notes_clean[..start], link_text, &notes_clean[end_idx + 1..]);
+                    notes_clean = format!(
+                        "{}{}{}",
+                        &notes_clean[..start],
+                        link_text,
+                        &notes_clean[end_idx + 1..]
+                    );
                     continue;
                 }
             }
@@ -147,9 +153,13 @@ pub fn parse_raw_compatibility_md(markdown: &str) -> Vec<CachedCompatEntry> {
             None
         };
 
-        let auto_exp = notes_lower.contains("autoexposure on") || notes_lower.contains("autoexposure");
-        let non_linear = notes_lower.contains("non-linear") || notes_lower.contains("srgb") || notes_lower.contains("pq input");
-        let disable_spoof = notes_lower.contains("disable spoof") || notes_lower.contains("without spoof");
+        let auto_exp =
+            notes_lower.contains("autoexposure on") || notes_lower.contains("autoexposure");
+        let non_linear = notes_lower.contains("non-linear")
+            || notes_lower.contains("srgb")
+            || notes_lower.contains("pq input");
+        let disable_spoof =
+            notes_lower.contains("disable spoof") || notes_lower.contains("without spoof");
         let fsr2_pat = notes_lower.contains("fsr2pattern");
         let force_dx12 = notes_lower.contains("-dx12") || notes_lower.contains("-force-d3d12");
 
@@ -178,7 +188,10 @@ pub fn parse_raw_compatibility_md(markdown: &str) -> Vec<CachedCompatEntry> {
 pub fn fetch_and_cache_compatibility_db(client: &Client) -> Result<CachedCompatDatabase> {
     let resp = client.get(COMPAT_WIKI_RAW_URL).send()?;
     if !resp.status().is_success() {
-        return Err(anyhow!("Failed to fetch live compatibility list: HTTP {}", resp.status()));
+        return Err(anyhow!(
+            "Failed to fetch live compatibility list: HTTP {}",
+            resp.status()
+        ));
     }
     let body = resp.text()?;
     let entries = parse_raw_compatibility_md(&body);
@@ -234,7 +247,7 @@ pub fn check_all_updates(client: &Client) -> UpdateCheckReport {
         .and_then(|r| r.json::<serde_json::Value>().ok())
         .and_then(|j| j["tag_name"].as_str().map(|s| s.to_string()));
 
-    let opti_up_to_date = opti_latest.as_deref().map_or(true, |lat| {
+    let opti_up_to_date = opti_latest.as_deref().is_none_or(|lat| {
         lat.trim_start_matches('v') == CURRENT_OPTISCALER_VERSION.trim_start_matches('v')
     });
 
@@ -243,13 +256,16 @@ pub fn check_all_updates(client: &Client) -> UpdateCheckReport {
         installed_version: CURRENT_OPTISCALER_VERSION.to_string(),
         latest_version: opti_latest.clone(),
         up_to_date: opti_up_to_date,
-        details: "FSR 3.1 & Intel XeSS upscaling with FSR 4.1.1 INT8 hardware acceleration".to_string(),
+        details: "FSR 3.1 & Intel XeSS upscaling with FSR 4.1.1 INT8 hardware acceleration"
+            .to_string(),
     });
 
     // 2. OptiScaler Compatibility Database
     let cached_db = load_cached_compatibility_db();
     let compat_count = cached_db.as_ref().map_or(700, |db| db.total_entries);
-    let compat_updated = cached_db.as_ref().map_or("Embedded static", |db| db.updated_at.as_str());
+    let compat_updated = cached_db
+        .as_ref()
+        .map_or("Embedded static", |db| db.updated_at.as_str());
 
     components.push(ComponentStatus {
         name: "OptiScaler Compatibility DB".to_string(),
@@ -265,14 +281,15 @@ pub fn check_all_updates(client: &Client) -> UpdateCheckReport {
         installed_version: "409 Games".to_string(),
         latest_version: Some("409 Games".to_string()),
         up_to_date: true,
-        details: "Official AMD FSR 4 'Redstone' supported catalog for RX 7000 (26.6.2+) & RX 9000".to_string(),
+        details: "Official AMD FSR 4 'Redstone' supported catalog for RX 7000 (26.6.2+) & RX 9000"
+            .to_string(),
     });
 
     // 4. ReShade Add-on Framework
     components.push(ComponentStatus {
         name: "ReShade Add-on Build".to_string(),
         installed_version: CURRENT_RESHADE_VERSION.to_string(),
-        latest_version: Some("v6.3.3+".to_string()),
+        latest_version: Some(CURRENT_RESHADE_VERSION.to_string()),
         up_to_date: true,
         details: "Official ReShade with Add-on support for RenoDX shaders".to_string(),
     });
