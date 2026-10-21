@@ -17,7 +17,16 @@ All notable changes to this project are documented here. The format follows
 - Uninstall ignores manifest entries that point outside the game folder, and handles each file once even if the
   manifest lists it twice or with different letter case.
 - Interrupted downloads are no longer cached as if complete (which made later installs fail until the cache was
-  cleared). A corrupt cached OptiScaler archive is now discarded so the next attempt downloads it again.
+  cleared), and a cached copy that fails checksum verification is downloaded again.
+- RDNA 3 GPUs now actually get FSR 4: OptiScaler's INT8 model (`Fsr4ForceEnableInt8`) is enabled for them.
+  Previously only `Fsr4Update` was set, which RDNA 3 cannot run without the INT8 model.
+- `OptiScaler.ini` no longer contains settings OptiScaler v0.9.4 does not have (`[General]`, `SpoofNvidia`,
+  `SpoofGpu`, `ReshadePath`).
+- REFramework and OptiPatcher were cached forever after the first download; new upstream builds are now picked up.
+- RenoDX add-ons are refreshed on every install (snapshots are rebuilt in place), and two add-ons with the same file
+  name from different sources no longer share a cache entry.
+- The app window no longer takes several seconds (much longer on a busy disk) to appear: game libraries are scanned
+  in the background. Rescanning no longer drops game folders that were added by hand.
 - REFramework for RE Engine games is downloaded from the current universal nightly (`REFramework.zip`); the old
   URL no longer existed, so it was silently skipped.
 - Removed the built-in RenoDX fallback list, whose download links no longer existed and could override live
@@ -26,7 +35,9 @@ All notable changes to this project are documented here. The format follows
   (e.g. "Tyr", "'83"), or match every entry for titles without letters or digits.
 - The GUI could get stuck showing a running task when *Check Upstream Versions* or *Sync Compatibility Wiki DB*
   was used during an install.
-- *Component Status* reports the ReShade version that is actually installed (6.4.1, previously shown as 6.3.3).
+- *Component Status* / `--check-updates` rows are real checks now: the latest OptiScaler, ReShade, and FSRoneclick
+  releases are compared numerically, the compatibility list shows when it was last synced, and rows without an
+  online source say *Not checked* instead of claiming to be current.
 
 ### Changed
 
@@ -42,8 +53,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- CI workflow (format, clippy, tests), issue and pull request templates, Dependabot, CONTRIBUTING, SECURITY, and
-  CODE_OF_CONDUCT documents.
+- AMD RDNA 4 (Radeon RX 9000) support: detected GPUs get FSR 4.1.1 with its native FP8 model.
+- SHA-256 verification of downloaded runtimes: pinned checksums for OptiScaler and ReShade, and the checksums GitHub
+  publishes for the latest REFramework and OptiPatcher releases.
+- Double-clicking `fsroneclick.exe` no longer leaves a console window open behind the app. Running it from a
+  terminal is unchanged.
+- CI workflow (format, clippy, tests, minimum Rust version), issue and pull request templates, Dependabot,
+  CONTRIBUTING, SECURITY, and CODE_OF_CONDUCT documents.
+
+### Security
+
+- RenoDX downloads on github.com must be release assets, since anyone can upload issue attachments there.
 
 ## [0.1.0] - 2026-09-13
 

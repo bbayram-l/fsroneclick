@@ -38,3 +38,20 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+  msrv:
+    name: Minimum Rust version (1.88)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --locked

@@ -51,6 +51,10 @@ cargo test
   Add a test in `tests/installer_rollback.rs` when you change install or uninstall behavior.
 - **Treat downloaded and remote data as untrusted.** Validate file names and URLs that come from wikis or APIs
   (see `renodx::parse_mods_catalog`), and keep downloads going through `net::download_with_progress`.
+- **Verify what gets executed.** Binaries are downloaded with `net::get_or_download_verified` (pinned SHA-256) or
+  `net::get_latest_github_asset` (SHA-256 published by GitHub). To bump a pinned component such as OptiScaler or
+  ReShade, update its version, URL, and SHA-256 together in `src/installer.rs`; `tests/downloads_and_updates.rs`
+  checks that they agree.
 - **Keep claims accurate.** README text and UI labels should describe what the code actually does.
 - **Dependencies.** Please open an issue before adding a new crate.
 - **Commit messages** follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, ...).

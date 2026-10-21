@@ -66,8 +66,10 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 - **Hook Strategy Selection**: Uses the proxy hook recommended by the community compatibility list to avoid launch crashes.
 
 ### Hardware-Aware Optimization
-- **RDNA 3 / RX 7000 Acceleration**: Detects RDNA 3 GPUs from the display adapter information Windows records and enables the FSR 4.1.1 path (`Fsr4Update`).
+- **RDNA 4 / RX 9000**: Upgrades games to FSR 4.1.1 running its native FP8 model (`Fsr4Update`).
+- **RDNA 3 / RX 7000**: Upgrades games to FSR 4.1.1 using OptiScaler's INT8 model (`Fsr4Update` + `Fsr4ForceEnableInt8`).
 - **Universal Fallback**: Uses FSR 3.1 for RDNA 2, Intel Arc, NVIDIA, and other GPUs.
+- The GPU is identified from the display adapter information Windows records; FSR 4 can be switched off in the app.
 - **Clean Display**: Watermark flags (`Fsr4EnableWatermark = false`, `EnableWatermark = false`) are disabled by default.
 
 ### Crash Prevention & Vendor-Lock Bypass
@@ -82,6 +84,13 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 ### Dynamic Database & Updates
 - **Large Compatibility Database**: ~700 titles from the OptiScaler community compatibility list and 400+ titles from AMD's FSR "Redstone" catalog are embedded.
 - **Live Sync**: `--update-compat` (or *Sync Compatibility Wiki DB* in the app) downloads and caches the latest OptiScaler compatibility list.
+- **Component Status**: `--check-updates` (or *Component Status* in the app) compares the pinned OptiScaler and ReShade builds and FSRoneclick itself against their latest releases, and says *Not checked* when a source can't be reached.
+
+### Verified Downloads
+- **OptiScaler and ReShade** are pinned releases checked against SHA-256 checksums built into FSRoneclick.
+- **REFramework and OptiPatcher** always use the latest release, checked against the SHA-256 GitHub publishes for it; a new upstream build is picked up automatically, and a previously verified copy is used when GitHub can't be reached.
+- Files are only installed from an archive that passed verification and was extracted completely. A download that fails verification is deleted: the install stops if it was OptiScaler or ReShade, and REFramework or OptiPatcher are skipped with a warning in the log.
+- RenoDX add-ons and ReShade shader headers have no published checksums. They are only fetched over HTTPS from GitHub, and RenoDX add-ons are refreshed on every install.
 
 ### Safe & Non-Destructive
 - **Manifest-Driven Clean Rollback**: Every placed file is recorded in `.fsroneclick-manifest`. Uninstall removes only those files.
@@ -98,7 +107,7 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 | `%LOCALAPPDATA%\FSRoneclick\cache` | Downloaded archives, extracted packages, cached compatibility list | No — delete the folder to reclaim space |
 | `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` | Sets the game to the *High performance* GPU (the same setting as Windows *Graphics settings*) | No — change it in Windows *Settings → Display → Graphics* |
 
-Downloads come from GitHub (OptiScaler, OptiPatcher, REFramework, RenoDX, shaders) and reshade.me.
+Downloads come from GitHub (OptiScaler, OptiPatcher, REFramework, RenoDX, shaders) and reshade.me (see [Verified Downloads](#verified-downloads)).
 
 ---
 
