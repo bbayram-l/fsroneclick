@@ -10,14 +10,36 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+// Pinned downloads: bump the version, URL, and SHA-256 together.
+pub const OPTISCALER_VERSION: &str = "0.9.4";
 pub const OPTISCALER_DIRECT_URL: &str =
     "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z";
+/// Matches the digest GitHub publishes for the v0.9.4 release asset.
+pub const OPTISCALER_SHA256: &str =
+    "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad";
 
-pub const OPTIPATCHER_URL: &str =
-    "https://github.com/optiscaler/OptiPatcher/releases/latest/download/OptiPatcher.asi";
-
+pub const RESHADE_VERSION: &str = "6.4.1";
 pub const RESHADE_ADDON_SETUP_URL: &str =
     "https://reshade.me/downloads/ReShade_Setup_6.4.1_Addon.exe";
+pub const RESHADE_ADDON_SETUP_SHA256: &str =
+    "130800ad62ee9743f85f24542a7b97fd29b2c18d427f5ad3540cddfeb6ce6e62";
+
+// Rolling downloads: always the latest release, verified against the SHA-256 GitHub publishes.
+pub const OPTIPATCHER_REPO: &str = "optiscaler/OptiPatcher";
+pub const REFRAMEWORK_REPO: &str = "praydog/REFramework-nightly";
+
+/// Progress messages for optional components that could not be installed start with this, so
+/// front ends can keep them visible after the install finishes.
+pub const SKIPPED_PREFIX: &str = "Skipping ";
+
+/// Extraction folders written by earlier versions, whose contents were never tied to a verified
+/// archive.
+const LEGACY_EXTRACT_DIRS: [&str; 4] = [
+    "optiscaler_extracted_0.9.4",
+    "reshade_extracted",
+    "reshade_6.4.1_extracted",
+    "reframework_extracted",
+];
 
 pub const CAS_SHADER_RAW: &str =
     "https://raw.githubusercontent.com/OopyDoopy/CAS-for-Reshade/master/CAS.fx";
@@ -25,10 +47,6 @@ pub const RESHADE_FXH_RAW: &str =
     "https://raw.githubusercontent.com/crosire/reshade-shaders/master/Shaders/ReShade.fxh";
 pub const RESHADE_UI_FXH_RAW: &str =
     "https://raw.githubusercontent.com/crosire/reshade-shaders/master/Shaders/ReShadeUI.fxh";
-
-/// Universal REFramework nightly build; the archive contains `dinput8.dll`.
-pub const REFRAMEWORK_ZIP_URL: &str =
-    "https://github.com/praydog/REFramework-nightly/releases/latest/download/REFramework.zip";
 
 /// Suffix given to a game's own file when an install has to overwrite it; uninstall restores it.
 pub const BACKUP_SUFFIX: &str = ".fsroneclick-backup";
@@ -117,7 +135,8 @@ technique ContrastAdaptiveSharpen
 pub struct InstallConfig {
     pub enable_optiscaler: bool,
     pub enable_frame_generation: bool,
-    pub enable_fsr4_int8: bool,
+    /// Upgrade FSR 3.1 to FSR 4 on GPUs that support it (FP8 on RDNA 4, INT8 on RDNA 3).
+    pub enable_fsr4: bool,
     pub enable_reshade: bool,
     pub enable_renodx: bool,
     pub enable_cas_sharpening: bool,
@@ -129,7 +148,7 @@ impl Default for InstallConfig {
         Self {
             enable_optiscaler: true,
             enable_frame_generation: true,
-            enable_fsr4_int8: true,
+            enable_fsr4: true,
             enable_reshade: true,
             enable_renodx: true,
             enable_cas_sharpening: true,
@@ -191,47 +210,55 @@ fn deploy_components(
     progress: &mut ProgressCallback,
 ) -> Result<()> {
     let target_dir = deployment.target_dir.clone();
+    let cache = net::cache_dir();
+    for legacy in LEGACY_EXTRACT_DIRS {
+        let _ = fs::remove_dir_all(cache.join(legacy));
+    }
 
     // 1. Install Capcom REFramework if game runs on RE Engine
     if game.is_re_engine && !target_dir.join("dinput8.dll").is_file() {
         progress(0.1, "Downloading REFramework for RE Engine");
-        let reframework = net::get_or_download_cached(
+        let reframework = net::get_latest_github_asset(
             client,
-            REFRAMEWORK_ZIP_URL,
+            REFRAMEWORK_REPO,
             "REFramework.zip",
             Box::new(|p, msg| progress(0.1 * p, msg)),
         )
-        .and_then(|zip| {
-            let extracted = net::cache_dir().join("reframework_extracted");
-            net::extract_zip(&zip, &extracted)?;
+        .and_then(|(zip, sha256)| {
+            net::extract_once(&cache, &zip, &sha256, "reframework", net::extract_zip)
+        })
+        .and_then(|extracted| {
             find_file_in_dir(&extracted, "dinput8.dll")
                 .ok_or_else(|| anyhow!("dinput8.dll not found in REFramework.zip"))
         });
         match reframework {
             Ok(src) => deployment.copy_file(&src, "dinput8.dll")?,
-            Err(e) => progress(0.15, &format!("Skipping REFramework: {e:#}")),
+            Err(e) => progress(0.15, &format!("{SKIPPED_PREFIX}REFramework: {e:#}")),
         }
     }
 
     // 2. OptiScaler Deployment (FSR 3.1 / FSR 4.1.1 + Frame Gen)
     if config.enable_optiscaler {
-        progress(0.2, "Acquiring OptiScaler v0.9.4 release");
-        let opti_archive = net::get_or_download_cached(
+        progress(
+            0.2,
+            &format!("Acquiring OptiScaler v{OPTISCALER_VERSION} release"),
+        );
+        let opti_archive = net::get_or_download_verified(
             client,
             OPTISCALER_DIRECT_URL,
-            "OptiScaler_0.9.4.7z",
+            &format!("OptiScaler_{OPTISCALER_VERSION}.7z"),
+            OPTISCALER_SHA256,
             Box::new(|p, msg| progress(0.2 + 0.2 * p, msg)),
         )?;
 
-        let temp_extract = net::cache_dir().join("optiscaler_extracted_0.9.4");
-        if !temp_extract.join("OptiScaler.dll").is_file() {
-            progress(0.4, "Decompressing OptiScaler assets");
-            if let Err(e) = net::extract_7z(&opti_archive, &temp_extract) {
-                // Drop the cached archive so the next attempt downloads a fresh copy.
-                let _ = fs::remove_file(&opti_archive);
-                return Err(e);
-            }
-        }
+        progress(0.4, "Decompressing OptiScaler assets");
+        let temp_extract = net::extract_once(
+            &cache,
+            &opti_archive,
+            OPTISCALER_SHA256,
+            "optiscaler",
+            net::extract_7z,
+        )?;
 
         progress(0.45, "Deploying OptiScaler & FakeNVAPI proxies");
         // Deploy OptiScaler.dll as recommended hook (e.g. dxgi.dll or winmm.dll)
@@ -270,14 +297,17 @@ fn deploy_components(
         // Deploy OptiPatcher for UE DLSS/DLSSG titles if supported
         if game.compat.optipatcher_supported {
             progress(0.48, "Deploying OptiPatcher for UE DLSS & Frame Gen unlock");
-            let patcher_cached = net::get_or_download_cached(
+            let patcher = net::get_latest_github_asset(
                 client,
-                OPTIPATCHER_URL,
+                OPTIPATCHER_REPO,
                 "OptiPatcher.asi",
                 Box::new(|_, _| {}),
             );
-            if let Ok(patcher_src) = patcher_cached {
-                let _ = deployment.copy_file(&patcher_src, "plugins/OptiPatcher.asi");
+            match patcher {
+                Ok((src, _)) => {
+                    let _ = deployment.copy_file(&src, "plugins/OptiPatcher.asi");
+                }
+                Err(e) => progress(0.49, &format!("{SKIPPED_PREFIX}OptiPatcher: {e:#}")),
             }
         }
 
@@ -293,23 +323,28 @@ fn deploy_components(
     // 3. ReShade (Add-on build) Deployment
     if config.enable_reshade {
         progress(0.55, "Fetching ReShade with Add-on support");
-        let reshade_exe = net::get_or_download_cached(
+        let reshade_exe = net::get_or_download_verified(
             client,
             RESHADE_ADDON_SETUP_URL,
-            "ReShade_Setup_Addon.exe",
+            &format!("ReShade_Setup_{RESHADE_VERSION}_Addon.exe"),
+            RESHADE_ADDON_SETUP_SHA256,
             Box::new(|p, msg| progress(0.55 + 0.15 * p, msg)),
         )?;
 
-        let temp_reshade = net::cache_dir().join("reshade_extracted");
-        if !temp_reshade.join("ReShade64.dll").is_file() {
-            progress(0.7, "Extracting ReShade64.dll from installer");
-            let _ = net::extract_7z(&reshade_exe, &temp_reshade);
-            let _ = net::extract_zip(&reshade_exe, &temp_reshade);
-        }
-
-        if let Some(src_reshade) = find_file_in_dir(&temp_reshade, "ReShade64.dll") {
-            deployment.copy_file(&src_reshade, RESHADE_DLL)?;
-        }
+        progress(0.7, "Extracting ReShade64.dll from installer");
+        // The add-on setup is a self-extracting archive: read it as a zip, or as 7z if that fails.
+        let temp_reshade = net::extract_once(
+            &cache,
+            &reshade_exe,
+            RESHADE_ADDON_SETUP_SHA256,
+            "reshade",
+            |archive, out| {
+                net::extract_zip(archive, out).or_else(|_| net::extract_7z(archive, out))
+            },
+        )?;
+        let src_reshade = find_file_in_dir(&temp_reshade, "ReShade64.dll")
+            .ok_or_else(|| anyhow!("ReShade64.dll not found in the ReShade installer"))?;
+        deployment.copy_file(&src_reshade, RESHADE_DLL)?;
 
         // Generate ReShade.ini, keeping any configuration the player already has
         if !target_dir.join("ReShade.ini").is_file() {
@@ -324,13 +359,21 @@ fn deploy_components(
                 0.75,
                 &format!("Matched RenoDX HDR mod for {}", matched_mod.game_title),
             );
-            if let Ok(cached_addon) = net::get_or_download_cached(
-                client,
+            // RenoDX snapshots are rebuilt in place without checksums, so fetch the current
+            // build each time and only fall back to the cached copy when offline.
+            let cached_addon = net::cache_dir().join(net::url_cache_name(
                 &matched_mod.download_url,
                 &matched_mod.filename,
+            ));
+            let downloaded = net::download_refreshing(
+                client,
+                &matched_mod.download_url,
+                &cached_addon,
                 Box::new(|p, msg| progress(0.75 + 0.1 * p, msg)),
-            ) {
-                deployment.copy_file(&cached_addon, &matched_mod.filename)?;
+            );
+            match downloaded {
+                Ok(()) => deployment.copy_file(&cached_addon, &matched_mod.filename)?,
+                Err(e) => progress(0.85, &format!("{SKIPPED_PREFIX}RenoDX HDR mod: {e:#}")),
             }
         }
     }
@@ -540,11 +583,10 @@ pub fn generate_optiscaler_ini(
     gpu_arch: &Arch,
     compat: &crate::compatibility::CompatibilityProfile,
 ) -> String {
-    let fsr4_update = if config.enable_fsr4_int8 && gpu_arch.supports_fsr4_int8() {
-        "true"
-    } else {
-        "false"
-    };
+    // OptiScaler v0.9.4: Fsr4Update upgrades FSR 3.1 to FSR 4, and Fsr4ForceEnableInt8 selects
+    // the INT8 model that GPUs without FP8 support (RDNA 3) need.
+    let fsr4_update = config.enable_fsr4 && gpu_arch.supports_fsr4();
+    let fsr4_int8 = config.enable_fsr4 && gpu_arch.supports_fsr4_int8();
 
     let auto_exp = if compat.auto_exposure { "true" } else { "auto" };
     let non_linear = if compat.non_linear_color_space {
@@ -566,11 +608,6 @@ pub fn generate_optiscaler_ini(
 
     format!(
         r#"; FSRoneclick Configuration - Optimized for AMD Radeon & Universal GPUs
-[General]
-LogLevel = 1
-LogToConsole = false
-LogToFile = true
-
 [Upscalers]
 Dx11Upscaler = fsr31
 Dx12Upscaler = fsr31
@@ -584,7 +621,7 @@ PreserveSwapChain = true
 
 [FSR]
 Fsr4Update = {fsr4_update}
-Fsr4ForceEnableInt8 = false
+Fsr4ForceEnableInt8 = {fsr4_int8}
 Fsr4EnableWatermark = false
 FsrAgilitySDKUpgrade = true
 FsrNonLinearColorSpace = {non_linear}
@@ -603,11 +640,8 @@ DisableReactiveMask = auto
 [Plugins]
 LoadAsiPlugins = {load_asi}
 LoadReshade = {load_reshade}
-ReshadePath = {reshade_dll}
 
 [Spoofing]
-SpoofNvidia = {spoof}
-SpoofGpu = {spoof}
 Dxgi = {spoof}
 StreamlineSpoofing = true
 
@@ -632,13 +666,13 @@ ColorResourceBarrier = auto
 MotionVectorResourceBarrier = auto
 "#,
         fsr4_update = fsr4_update,
+        fsr4_int8 = fsr4_int8,
         auto_exp = auto_exp,
         non_linear = non_linear,
         fsr2_pattern = fsr2_pattern,
         fg_enabled = config.enable_frame_generation,
         load_asi = load_asi,
         load_reshade = config.enable_reshade,
-        reshade_dll = RESHADE_DLL,
         spoof = spoof,
     )
 }

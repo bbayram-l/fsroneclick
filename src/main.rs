@@ -4,6 +4,7 @@ use fsroneclick::gui;
 use fsroneclick::installer;
 use fsroneclick::net;
 use fsroneclick::renodx;
+use fsroneclick::updater::ComponentState;
 
 use anyhow::Result;
 use std::env;
@@ -126,12 +127,12 @@ fn run_check_updates_cli() {
     );
     println!("{}", "-".repeat(78));
     for c in &report.components {
-        let status_str = if c.up_to_date {
-            "Up to date"
-        } else {
-            "Update Available"
+        let status_str = match c.state {
+            ComponentState::UpToDate => "Up to date",
+            ComponentState::UpdateAvailable => "Update Available",
+            ComponentState::NotChecked => "Not checked",
         };
-        let latest = c.latest_version.as_deref().unwrap_or("Unknown");
+        let latest = c.latest_version.as_deref().unwrap_or("-");
         println!(
             "{:<30} {:<18} {:<18} {:<8}",
             c.name, c.installed_version, latest, status_str
@@ -402,7 +403,62 @@ fn run_uninstall_cli(path_str: &str) {
     }
 }
 
+/// A double-click in Explorer makes Windows create a console window just for this process.
+/// Release it so only the GUI window remains. When started from a terminal, the terminal shares
+/// the console and nothing changes, so CLI output, piping, and exit codes keep working.
+#[cfg(windows)]
+fn release_console_if_owned() {
+    use windows_sys::Win32::System::Console::{
+        FreeConsole, GetConsoleProcessList, SetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
+        STD_OUTPUT_HANDLE,
+    };
+
+    let mut process_ids = [0u32; 2];
+    // SAFETY: `process_ids` has room for the number of entries passed as its length.
+    let attached =
+        unsafe { GetConsoleProcessList(process_ids.as_mut_ptr(), process_ids.len() as u32) };
+    if attached == 1 {
+        // SAFETY: FreeConsole has no preconditions; it only detaches this process from its console.
+        unsafe { FreeConsole() };
+        // The old console handle values would otherwise be reused for unrelated files, and a
+        // later print would write into them; with null handles, output is discarded instead.
+        for handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: setting a standard handle to null is always allowed.
+            unsafe { SetStdHandle(handle, std::ptr::null_mut()) };
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn release_console_if_owned() {}
+
+/// Reports an error with a message box, since a GUI launch may have no console to print to.
+#[cfg(windows)]
+fn show_error_dialog(message: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    let wide = |s: &str| {
+        s.encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>()
+    };
+    let (text, caption) = (wide(message), wide("FSRoneclick"));
+    // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            caption.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        )
+    };
+}
+
+#[cfg(not(windows))]
+fn show_error_dialog(_message: &str) {}
+
 fn run_gui() {
+    release_console_if_owned();
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1080.0, 720.0])
@@ -411,11 +467,18 @@ fn run_gui() {
         ..Default::default()
     };
 
-    let _ = eframe::run_native(
+    if let Err(e) = eframe::run_native(
         "FSRoneclick",
         native_options,
         Box::new(|cc| Ok(Box::new(gui::FSRoneclickApp::new(cc)))),
-    );
+    ) {
+        let message = format!(
+            "FSRoneclick could not open its window: {e}\n\n\
+             The command-line interface still works; run `fsroneclick.exe --help` in a terminal."
+        );
+        eprintln!("{message}");
+        show_error_dialog(&message);
+    }
 }
 
 fn truncate_str(s: &str, max_chars: usize) -> String {

@@ -2,6 +2,8 @@
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Arch {
+    /// AMD RDNA 4 (Navi 4x / RX 9000 series, e.g. RX 9070 XT) - runs the native FP8 FSR 4 model.
+    Rdna4,
     /// AMD RDNA 3 (Navi 3x / RX 7000 series, e.g. RX 7700 XT) - has dedicated AI matrix cores & official INT8 support.
     Rdna3,
     /// AMD RDNA 2 (Navi 2x / RX 6000 series).
@@ -18,6 +20,7 @@ pub enum Arch {
 impl Arch {
     pub fn label(&self) -> &'static str {
         match self {
+            Arch::Rdna4 => "AMD RDNA 4 · Native FSR 4 & FSR Frame Gen",
             Arch::Rdna3 => "AMD RDNA 3 · Native FSR 4 INT8 & FSR 3.1 FG Accelerated",
             Arch::Rdna2 => "AMD RDNA 2 · FSR 3.1 & FSR Frame Gen Supported",
             Arch::OtherAmd => "AMD Radeon · FSR 3.1 Supported",
@@ -27,8 +30,43 @@ impl Arch {
         }
     }
 
+    /// FSR 4's FP8 model runs natively (RDNA 4).
+    pub fn has_native_fsr4(&self) -> bool {
+        matches!(self, Arch::Rdna4)
+    }
+
+    /// FSR 4 is available through the INT8 model (RDNA 3).
     pub fn supports_fsr4_int8(&self) -> bool {
         matches!(self, Arch::Rdna3)
+    }
+
+    pub fn supports_fsr4(&self) -> bool {
+        self.has_native_fsr4() || self.supports_fsr4_int8()
+    }
+}
+
+/// Maps a display adapter name (e.g. "AMD Radeon RX 9070 XT") to its architecture.
+pub fn classify_adapter(name: &str) -> Arch {
+    let desc_lower = name.to_lowercase();
+    let has = |needles: &[&str]| needles.iter().any(|n| desc_lower.contains(n));
+
+    if has(&["9070", "9060", "r9700", "rdna 4", "rdna4", "gfx12"]) {
+        Arch::Rdna4
+    } else if has(&["7900", "7800", "7700", "7600", "rdna 3", "rdna3", "gfx11"]) {
+        Arch::Rdna3
+    } else if has(&[
+        "6950", "6900", "6800", "6750", "6700", "6650", "6600", "6500", "6400", "rdna 2", "rdna2",
+        "gfx10",
+    ]) {
+        Arch::Rdna2
+    } else if has(&["radeon", "amd"]) {
+        Arch::OtherAmd
+    } else if has(&["arc", "intel"]) {
+        Arch::IntelArc
+    } else if has(&["geforce", "rtx", "gtx"]) {
+        Arch::Nvidia
+    } else {
+        Arch::Unknown
     }
 }
 
@@ -103,51 +141,15 @@ pub fn detect_gpu() -> Option<GpuInfo> {
             continue;
         }
 
-        let arch = if desc_lower.contains("7900")
-            || desc_lower.contains("7800")
-            || desc_lower.contains("7700")
-            || desc_lower.contains("7600")
-            || desc_lower.contains("rdna 3")
-            || desc_lower.contains("rdna3")
-            || desc_lower.contains("gfx11")
-        {
-            Arch::Rdna3
-        } else if desc_lower.contains("6950")
-            || desc_lower.contains("6900")
-            || desc_lower.contains("6800")
-            || desc_lower.contains("6750")
-            || desc_lower.contains("6700")
-            || desc_lower.contains("6650")
-            || desc_lower.contains("6600")
-            || desc_lower.contains("6500")
-            || desc_lower.contains("6400")
-            || desc_lower.contains("rdna 2")
-            || desc_lower.contains("rdna2")
-            || desc_lower.contains("gfx10")
-        {
-            Arch::Rdna2
-        } else if desc_lower.contains("radeon") || desc_lower.contains("amd") {
-            Arch::OtherAmd
-        } else if desc_lower.contains("arc") || desc_lower.contains("intel") {
-            Arch::IntelArc
-        } else if desc_lower.contains("geforce")
-            || desc_lower.contains("rtx")
-            || desc_lower.contains("gtx")
-        {
-            Arch::Nvidia
-        } else {
-            Arch::Unknown
-        };
-
         let info = GpuInfo {
+            arch: classify_adapter(&desc),
             name: desc,
             vendor: provider,
             driver_version: ver,
-            arch,
         };
 
         // Prefer discrete AMD or dedicated gaming GPUs over integrated
-        if matches!(info.arch, Arch::Rdna3 | Arch::Rdna2) {
+        if matches!(info.arch, Arch::Rdna4 | Arch::Rdna3 | Arch::Rdna2) {
             return Some(info);
         }
 

@@ -196,7 +196,7 @@ pub fn scan_all_games() -> Vec<GameInfo> {
 /// Comparison key for Windows paths, which ignore case and accept either separator. Steam's
 /// registry value (`c:/program files (x86)/steam`) and its library list
 /// (`C:\Program Files (x86)\Steam`) name the same folder differently.
-fn path_key(path: &Path) -> String {
+pub fn path_key(path: &Path) -> String {
     path.to_string_lossy()
         .replace('/', "\\")
         .trim_end_matches('\\')

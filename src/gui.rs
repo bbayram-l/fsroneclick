@@ -1,10 +1,11 @@
 //! Native egui graphical interface for FSRoneclick.
 
-use crate::game::{self, GameInfo};
+use crate::game::{self, GameInfo, ModStatus, Store};
 use crate::gpu::{self, GpuInfo};
 use crate::installer::{self, InstallConfig};
 use crate::net;
 use crate::renodx::{self, RenoDxMod};
+use crate::updater::ComponentState;
 use eframe::egui::{self, Color32, RichText, Rounding, Stroke, Vec2};
 use reqwest::blocking::Client;
 use std::collections::HashMap;
@@ -13,13 +14,21 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
 pub struct FSRoneclickApp {
+    ctx: egui::Context,
     client: Client,
     gpu: Option<GpuInfo>,
     games: Vec<GameInfo>,
-    mod_status_cache: Vec<crate::game::ModStatus>,
+    mod_status_cache: Vec<ModStatus>,
+    is_scanning: bool,
+    /// Another scan was requested while one was running.
+    rescan_pending: bool,
+    /// Bumped whenever an install or uninstall finishes, so a scan that started earlier can
+    /// tell that its mod statuses are out of date.
+    status_generation: u64,
     filtered_games: Vec<usize>,
     selected_game_idx: Option<usize>,
     renodx_catalog: HashMap<String, RenoDxMod>,
+    catalog_loaded: bool,
     search_query: String,
     config: InstallConfig,
     custom_path_input: String,
@@ -48,29 +57,41 @@ enum TaskMessage {
     Done(Result<String, String>),
     UpdateReport(crate::updater::UpdateCheckReport),
     CompatDbUpdated(Result<usize, String>),
+    /// Scanned games, their mod statuses, and the `status_generation` the scan started at.
+    GamesScanned(Vec<GameInfo>, Vec<ModStatus>, u64),
+    RenoDxCatalog(HashMap<String, RenoDxMod>),
 }
 
 impl FSRoneclickApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let client = net::create_http_client().unwrap_or_else(|_| Client::new());
         let gpu = gpu::detect_gpu();
-
-        // Load local cached compatibility database if present on startup
-        let _ = crate::updater::load_cached_compatibility_db();
-
-        let games = game::scan_all_games();
-        let mod_status_cache = games.iter().map(|g| g.check_mod_status()).collect();
-        let renodx_catalog = renodx::fetch_mods_catalog(&client);
         let (task_tx, task_rx) = channel();
 
+        // Scanning libraries and fetching the RenoDX catalog can take many seconds on a cold disk
+        // or slow network, so both run in the background and the window opens immediately.
+        let catalog_tx = task_tx.clone();
+        let catalog_client = client.clone();
+        let catalog_ctx = cc.egui_ctx.clone();
+        thread::spawn(move || {
+            let catalog = renodx::fetch_mods_catalog(&catalog_client);
+            let _ = catalog_tx.send(TaskMessage::RenoDxCatalog(catalog));
+            catalog_ctx.request_repaint();
+        });
+
         let mut app = Self {
+            ctx: cc.egui_ctx.clone(),
             client,
             gpu,
-            games,
-            mod_status_cache,
+            games: Vec::new(),
+            mod_status_cache: Vec::new(),
+            is_scanning: false,
+            rescan_pending: false,
+            status_generation: 0,
             filtered_games: Vec::new(),
             selected_game_idx: None,
-            renodx_catalog,
+            renodx_catalog: HashMap::new(),
+            catalog_loaded: false,
             search_query: String::new(),
             config: InstallConfig::default(),
             custom_path_input: String::new(),
@@ -88,19 +109,7 @@ impl FSRoneclickApp {
             is_updating_compat_db: false,
             update_status_text: None,
         };
-
-        // If RDNA 3 GPU is present, ensure FSR 4 INT8 is enabled by default
-        if let Some(ref g) = app.gpu {
-            if g.arch.supports_fsr4_int8() {
-                app.config.enable_fsr4_int8 = true;
-            }
-        }
-
-        app.update_filter();
-        if !app.filtered_games.is_empty() {
-            app.selected_game_idx = Some(app.filtered_games[0]);
-        }
-
+        app.refresh_games();
         app
     }
 
@@ -115,10 +124,59 @@ impl FSRoneclickApp {
             .collect();
     }
 
+    /// Rescans the game libraries on a background thread; the result arrives as `GamesScanned`.
     fn refresh_games(&mut self) {
-        self.games = game::scan_all_games();
-        self.mod_status_cache = self.games.iter().map(|g| g.check_mod_status()).collect();
+        if self.is_scanning {
+            self.rescan_pending = true;
+            return;
+        }
+        self.is_scanning = true;
+        let generation = self.status_generation;
+        let tx = self.task_tx.clone();
+        let ctx = self.ctx.clone();
+        thread::spawn(move || {
+            // Cached live compatibility data must be loaded before games are matched against it.
+            let _ = crate::updater::load_cached_compatibility_db();
+            let games = game::scan_all_games();
+            let statuses = games.iter().map(|g| g.check_mod_status()).collect();
+            let _ = tx.send(TaskMessage::GamesScanned(games, statuses, generation));
+            ctx.request_repaint();
+        });
+    }
+
+    fn apply_scan(&mut self, scanned: Vec<GameInfo>, statuses: Vec<ModStatus>, generation: u64) {
+        let selected_path = self
+            .selected_game_idx
+            .and_then(|idx| self.games.get(idx))
+            .map(|g| g.path.clone());
+
+        // Keep folders the user added by hand; a library scan never finds them.
+        let mut games: Vec<GameInfo> = self
+            .games
+            .iter()
+            .filter(|g| {
+                g.store == Store::Custom
+                    && !scanned
+                        .iter()
+                        .any(|found| game::path_key(&found.path) == game::path_key(&g.path))
+            })
+            .cloned()
+            .collect();
+        let mut all_statuses: Vec<ModStatus> = games.iter().map(|g| g.check_mod_status()).collect();
+        games.extend(scanned);
+        all_statuses.extend(statuses);
+
+        // An install or uninstall that finished during the scan made its statuses stale.
+        if generation != self.status_generation {
+            all_statuses = games.iter().map(|g| g.check_mod_status()).collect();
+        }
+
+        self.games = games;
+        self.mod_status_cache = all_statuses;
         self.update_filter();
+        self.selected_game_idx = selected_path
+            .and_then(|path| self.games.iter().position(|g| g.path == path))
+            .or_else(|| self.filtered_games.first().copied());
     }
 
     fn run_install(&mut self, game_idx: usize) {
@@ -130,7 +188,9 @@ impl FSRoneclickApp {
             .as_ref()
             .map(|g| g.arch.clone())
             .unwrap_or(gpu::Arch::Unknown);
-        let catalog = self.renodx_catalog.clone();
+        // Before the startup catalog fetch has finished, the install fetches it itself rather
+        // than silently leaving out the game's HDR mod.
+        let catalog = self.catalog_loaded.then(|| self.renodx_catalog.clone());
 
         let tx = self.task_tx.clone();
         self.task_running = true;
@@ -143,6 +203,7 @@ impl FSRoneclickApp {
                 let _ = tx_clone.send(TaskMessage::Progress(pct, msg.to_string()));
             });
 
+            let catalog = catalog.unwrap_or_else(|| renodx::fetch_mods_catalog(&client));
             match installer::install(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
                 Ok(files) => {
                     let _ = tx.send(TaskMessage::Log(format!(
@@ -232,6 +293,10 @@ impl FSRoneclickApp {
         for msg in messages {
             match msg {
                 TaskMessage::Progress(pct, s) => {
+                    // Skipped components would otherwise vanish with the next progress update.
+                    if s.starts_with(installer::SKIPPED_PREFIX) {
+                        self.log_messages.push(format!("WARNING: {s}"));
+                    }
                     self.progress_val = pct;
                     self.progress_msg = s;
                 }
@@ -251,6 +316,7 @@ impl FSRoneclickApp {
                             self.log_messages.push(format!("ERROR: {err}"));
                         }
                     }
+                    self.status_generation += 1;
                     self.mod_status_cache =
                         self.games.iter().map(|g| g.check_mod_status()).collect();
                 }
@@ -272,6 +338,17 @@ impl FSRoneclickApp {
                             self.update_status_text = Some(format!("Wiki update failed: {e}"));
                         }
                     }
+                }
+                TaskMessage::GamesScanned(games, statuses, generation) => {
+                    self.is_scanning = false;
+                    self.apply_scan(games, statuses, generation);
+                    if std::mem::take(&mut self.rescan_pending) {
+                        needs_refresh = true;
+                    }
+                }
+                TaskMessage::RenoDxCatalog(catalog) => {
+                    self.renodx_catalog = catalog;
+                    self.catalog_loaded = true;
                 }
             }
         }
@@ -331,7 +408,7 @@ impl eframe::App for FSRoneclickApp {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(ref gpu) = self.gpu {
-                        let badge_color = if matches!(gpu.arch, gpu::Arch::Rdna3) {
+                        let badge_color = if gpu.arch.supports_fsr4() {
                             Color32::from_rgb(255, 60, 80) // AMD Red
                         } else {
                             Color32::from_rgb(70, 150, 230)
@@ -394,7 +471,10 @@ impl eframe::App for FSRoneclickApp {
                         self.update_filter();
                     }
 
-                    if ui.button("Rescan").clicked() {
+                    if ui
+                        .add_enabled(!self.is_scanning, egui::Button::new("Rescan"))
+                        .clicked()
+                    {
                         self.refresh_games();
                     }
                 });
@@ -422,11 +502,21 @@ impl eframe::App for FSRoneclickApp {
                 });
 
                 ui.add_space(6.0);
-                ui.label(
-                    RichText::new(format!("Installed Games ({})", self.filtered_games.len()))
-                        .small()
-                        .color(Color32::GRAY),
-                );
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("Installed Games ({})", self.filtered_games.len()))
+                            .small()
+                            .color(Color32::GRAY),
+                    );
+                    if self.is_scanning {
+                        ui.spinner();
+                        ui.label(
+                            RichText::new("Scanning game libraries...")
+                                .small()
+                                .color(Color32::GRAY),
+                        );
+                    }
+                });
                 ui.add_space(4.0);
 
                 egui::ScrollArea::vertical()
@@ -498,7 +588,11 @@ impl eframe::App for FSRoneclickApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             let Some(idx) = self.selected_game_idx else {
                 ui.centered_and_justified(|ui| {
-                    ui.heading("Select a game from the sidebar to inspect and enhance");
+                    ui.heading(if self.is_scanning {
+                        "Scanning your game libraries..."
+                    } else {
+                        "Select a game from the sidebar to inspect and enhance"
+                    });
                 });
                 return;
             };
@@ -638,12 +732,16 @@ impl eframe::App for FSRoneclickApp {
                 ui.checkbox(&mut self.config.enable_frame_generation, "AMD FSR 3.1 Frame Generation");
                 ui.label(RichText::new("   Enables Nukem9's DLSS-G to FSR 3 Frame Generation bridge.").size(11.0).color(Color32::GRAY));
 
-                let is_rdna3 = self.gpu.as_ref().is_some_and(|g| g.arch.supports_fsr4_int8());
+                let arch = self.gpu.as_ref().map(|g| &g.arch);
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.config.enable_fsr4_int8, "FSR 4.1.1 INT8 Neural Model");
-                    if is_rdna3 {
-                        ui.label(RichText::new("(Hardware Accelerated on your RDNA 3 GPU)").color(Color32::from_rgb(100, 220, 100)).size(11.0));
-                    }
+                    ui.checkbox(&mut self.config.enable_fsr4, "FSR 4.1.1 ML Upscaling");
+                    let supported_color = Color32::from_rgb(100, 220, 100);
+                    let (note, color) = match arch {
+                        Some(gpu::Arch::Rdna4) => ("(Native FP8 model on your RDNA 4 GPU)", supported_color),
+                        Some(gpu::Arch::Rdna3) => ("(INT8 model on your RDNA 3 GPU)", supported_color),
+                        _ => ("(Requires an RDNA 3 or RDNA 4 GPU; FSR 3.1 is used otherwise)", Color32::GRAY),
+                    };
+                    ui.label(RichText::new(note).color(color).size(11.0));
                 });
 
                 ui.checkbox(&mut self.config.enable_reshade, "ReShade (Add-on support build)");
@@ -778,6 +876,8 @@ impl eframe::App for FSRoneclickApp {
                                                 (Color32::from_rgb(100, 220, 140), subline)
                                             } else if subline.starts_with("ERROR:") || subline.starts_with("Failed") {
                                                 (Color32::from_rgb(255, 100, 100), subline)
+                                            } else if subline.starts_with("WARNING:") {
+                                                (Color32::from_rgb(255, 190, 60), subline)
                                             } else if subline.starts_with('+') || subline.starts_with('-') {
                                                 (Color32::from_rgb(140, 200, 255), subline)
                                             } else {
@@ -801,7 +901,11 @@ impl eframe::App for FSRoneclickApp {
             self.render_updates_window(ctx);
         }
 
-        if self.task_running || self.is_checking_updates || self.is_updating_compat_db {
+        if self.task_running
+            || self.is_checking_updates
+            || self.is_updating_compat_db
+            || self.is_scanning
+        {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));
         }
     }
@@ -983,11 +1087,12 @@ impl FSRoneclickApp {
                                 ui.label(RichText::new(&comp.name).strong());
                                 ui.label(&comp.installed_version);
                                 ui.label(comp.latest_version.as_deref().unwrap_or("—"));
-                                if comp.up_to_date {
-                                    ui.label(RichText::new("Current").color(Color32::from_rgb(100, 220, 120)));
-                                } else {
-                                    ui.label(RichText::new("Update Available").color(Color32::from_rgb(255, 180, 50)));
-                                }
+                                let (status, color) = match comp.state {
+                                    ComponentState::UpToDate => ("Current", Color32::from_rgb(100, 220, 120)),
+                                    ComponentState::UpdateAvailable => ("Update Available", Color32::from_rgb(255, 180, 50)),
+                                    ComponentState::NotChecked => ("Not checked", Color32::GRAY),
+                                };
+                                ui.label(RichText::new(status).color(color)).on_hover_text(&comp.details);
                                 ui.end_row();
                             }
                         });

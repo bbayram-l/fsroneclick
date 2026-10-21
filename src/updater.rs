@@ -2,19 +2,19 @@
 //! Checks GitHub releases for OptiScaler, live wiki updates, and RenoDX catalog updates.
 
 use anyhow::{anyhow, Result};
+use regex::Regex;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const CURRENT_APP_VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
-pub const CURRENT_OPTISCALER_VERSION: &str = "v0.9.4";
-/// Must match the build pinned in `installer::RESHADE_ADDON_SETUP_URL`.
-pub const CURRENT_RESHADE_VERSION: &str = "v6.4.1 (Addon)";
 pub const COMPAT_WIKI_RAW_URL: &str =
     "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md";
-pub const OPTISCALER_RELEASES_API: &str =
-    "https://api.github.com/repos/optiscaler/OptiScaler/releases/latest";
+const RESHADE_HOMEPAGE: &str = "https://reshade.me";
+/// A synced compatibility list older than this is reported as due for a refresh.
+const COMPAT_SYNC_MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedCompatEntry {
@@ -34,9 +34,21 @@ pub struct CachedCompatEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedCompatDatabase {
+    /// Human-readable sync time, e.g. "2026-10-21 14:05 UTC".
     pub updated_at: String,
+    /// Sync time in seconds since the Unix epoch (0 for caches written by older versions).
+    #[serde(default)]
+    pub synced_unix: u64,
     pub total_entries: usize,
     pub entries: Vec<CachedCompatEntry>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentState {
+    UpToDate,
+    UpdateAvailable,
+    /// No online source could be checked (offline, rate-limited, or the data is embedded).
+    NotChecked,
 }
 
 #[derive(Debug, Clone)]
@@ -44,14 +56,13 @@ pub struct ComponentStatus {
     pub name: String,
     pub installed_version: String,
     pub latest_version: Option<String>,
-    pub up_to_date: bool,
+    pub state: ComponentState,
     pub details: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateCheckReport {
     pub components: Vec<ComponentStatus>,
-    pub can_update_compat_db: bool,
     pub has_app_update: bool,
 }
 
@@ -200,8 +211,10 @@ pub fn fetch_and_cache_compatibility_db(client: &Client) -> Result<CachedCompatD
     }
 
     let count = entries.len();
+    let now = unix_now();
     let db = CachedCompatDatabase {
-        updated_at: chrono_like_timestamp(),
+        updated_at: format_utc(now),
+        synced_unix: now,
         total_entries: count,
         entries,
     };
@@ -239,88 +252,206 @@ pub fn load_cached_compatibility_db() -> Option<CachedCompatDatabase> {
 pub fn check_all_updates(client: &Client) -> UpdateCheckReport {
     let mut components = Vec::new();
 
-    // 1. OptiScaler Release Check
-    let opti_latest = client
-        .get(OPTISCALER_RELEASES_API)
-        .send()
-        .ok()
-        .and_then(|r| r.json::<serde_json::Value>().ok())
-        .and_then(|j| j["tag_name"].as_str().map(|s| s.to_string()));
+    // 1. OptiScaler release (the installer pins a specific, checksum-verified build)
+    components.push(versioned_status(
+        "OptiScaler Engine",
+        &format!("v{}", crate::installer::OPTISCALER_VERSION),
+        github_latest_tag(client, "optiscaler/OptiScaler"),
+        "Pinned, checksum-verified release used for installs (FSR 3.1 / FSR 4, frame generation)",
+    ));
 
-    let opti_up_to_date = opti_latest.as_deref().is_none_or(|lat| {
-        lat.trim_start_matches('v') == CURRENT_OPTISCALER_VERSION.trim_start_matches('v')
-    });
-
-    components.push(ComponentStatus {
-        name: "OptiScaler Engine".to_string(),
-        installed_version: CURRENT_OPTISCALER_VERSION.to_string(),
-        latest_version: opti_latest.clone(),
-        up_to_date: opti_up_to_date,
-        details: "FSR 3.1 & Intel XeSS upscaling with FSR 4.1.1 INT8 hardware acceleration"
-            .to_string(),
-    });
-
-    // 2. OptiScaler Compatibility Database
+    // 2. OptiScaler compatibility list (embedded, optionally synced from the live wiki)
     let cached_db = load_cached_compatibility_db();
-    let compat_count = cached_db.as_ref().map_or(700, |db| db.total_entries);
-    let compat_updated = cached_db
-        .as_ref()
-        .map_or("Embedded static", |db| db.updated_at.as_str());
-
+    let (installed_version, state, details) = match &cached_db {
+        Some(db) => {
+            let stale = unix_now().saturating_sub(db.synced_unix) > COMPAT_SYNC_MAX_AGE_SECS;
+            (
+                format!("{} games", db.total_entries),
+                if stale {
+                    ComponentState::UpdateAvailable
+                } else {
+                    ComponentState::UpToDate
+                },
+                format!("Synced from the live wiki on {}", db.updated_at),
+            )
+        }
+        None => (
+            format!(
+                "{} games",
+                crate::compatibility::embedded_optiscaler_count()
+            ),
+            ComponentState::UpdateAvailable,
+            "Embedded list; sync to get the latest community results".to_string(),
+        ),
+    };
     components.push(ComponentStatus {
         name: "OptiScaler Compatibility DB".to_string(),
-        installed_version: format!("{compat_count} Games"),
-        latest_version: Some("Live Wiki on GitHub".to_string()),
-        up_to_date: cached_db.is_some(),
-        details: format!("Community tested compatibility & workarounds (Status: {compat_updated})"),
+        installed_version,
+        latest_version: Some("Live wiki".to_string()),
+        state,
+        details,
     });
 
-    // 3. AMD FSR Redstone Knowledge Base
+    // 3. AMD FSR Redstone catalog (embedded only; there is no machine-readable upstream)
     components.push(ComponentStatus {
         name: "AMD FSR Redstone DB".to_string(),
-        installed_version: "409 Games".to_string(),
-        latest_version: Some("409 Games".to_string()),
-        up_to_date: true,
-        details: "Official AMD FSR 4 'Redstone' supported catalog for RX 7000 (26.6.2+) & RX 9000"
+        installed_version: format!("{} games", crate::compatibility::embedded_redstone_count()),
+        latest_version: None,
+        state: ComponentState::NotChecked,
+        details: "Embedded AMD FSR 4 'Redstone' catalog, updated with FSRoneclick releases"
             .to_string(),
     });
 
-    // 4. ReShade Add-on Framework
-    components.push(ComponentStatus {
-        name: "ReShade Add-on Build".to_string(),
-        installed_version: CURRENT_RESHADE_VERSION.to_string(),
-        latest_version: Some(CURRENT_RESHADE_VERSION.to_string()),
-        up_to_date: true,
-        details: "Official ReShade with Add-on support for RenoDX shaders".to_string(),
-    });
+    // 4. ReShade add-on build (pinned and checksum-verified, like OptiScaler)
+    let reshade_latest = client
+        .get(RESHADE_HOMEPAGE)
+        .send()
+        .and_then(|resp| resp.error_for_status())
+        .and_then(|resp| resp.text())
+        .ok()
+        .and_then(|html| parse_reshade_latest_version(&html))
+        .map(|version| format!("v{version}"));
+    components.push(versioned_status(
+        "ReShade Add-on Build",
+        &format!("v{}", crate::installer::RESHADE_VERSION),
+        reshade_latest,
+        "Pinned, checksum-verified ReShade with add-on support (required by RenoDX)",
+    ));
 
-    // 5. RenoDX HDR Mod Catalog
-    let renodx_catalog = crate::renodx::fetch_mods_catalog(client);
+    // 5. RenoDX HDR mod catalog (always read live from the wiki)
+    let renodx_count = crate::renodx::fetch_mods_catalog(client).len();
+    let renodx_live = renodx_count > 0;
     components.push(ComponentStatus {
         name: "RenoDX HDR Catalog".to_string(),
-        installed_version: format!("{} Games", renodx_catalog.len()),
-        latest_version: Some(format!("{} Games", renodx_catalog.len())),
-        up_to_date: true,
-        details: "Community studio-grade HDR10/scRGB enhancement mods".to_string(),
+        installed_version: format!("{renodx_count} mods"),
+        latest_version: renodx_live.then(|| format!("{renodx_count} mods")),
+        state: if renodx_live {
+            ComponentState::UpToDate
+        } else {
+            ComponentState::NotChecked
+        },
+        details: if renodx_live {
+            "Read live from the RenoDX wiki at every install".to_string()
+        } else {
+            "The RenoDX wiki could not be reached".to_string()
+        },
     });
 
-    // 6. FSRoneclick Application
-    components.push(ComponentStatus {
-        name: "FSRoneclick App".to_string(),
-        installed_version: CURRENT_APP_VERSION.to_string(),
-        latest_version: Some(CURRENT_APP_VERSION.to_string()),
-        up_to_date: true,
-        details: "1-Click optimization suite for AMD Radeon & universal GPUs".to_string(),
-    });
+    // 6. FSRoneclick itself
+    let app_repo = env!("CARGO_PKG_REPOSITORY").trim_start_matches("https://github.com/");
+    let app = versioned_status(
+        "FSRoneclick App",
+        CURRENT_APP_VERSION,
+        github_latest_tag(client, app_repo),
+        "Download new versions from the GitHub releases page",
+    );
+    let has_app_update = app.state == ComponentState::UpdateAvailable;
+    components.push(app);
 
     UpdateCheckReport {
         components,
-        can_update_compat_db: true,
-        has_app_update: !opti_up_to_date,
+        has_app_update,
     }
 }
 
-fn chrono_like_timestamp() -> String {
-    // Simple current date indicator
-    "Latest Live Sync".to_string()
+fn versioned_status(
+    name: &str,
+    installed: &str,
+    latest: Option<String>,
+    details: &str,
+) -> ComponentStatus {
+    let state = match &latest {
+        Some(latest) if is_newer_version(latest, installed) => ComponentState::UpdateAvailable,
+        Some(_) => ComponentState::UpToDate,
+        None => ComponentState::NotChecked,
+    };
+    ComponentStatus {
+        name: name.to_string(),
+        installed_version: installed.to_string(),
+        latest_version: latest,
+        state,
+        details: details.to_string(),
+    }
+}
+
+fn github_latest_tag(client: &Client, owner_repo: &str) -> Option<String> {
+    let url = format!("https://api.github.com/repos/{owner_repo}/releases/latest");
+    let release: serde_json::Value = client
+        .get(url)
+        .send()
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .ok()?;
+    release["tag_name"].as_str().map(str::to_string)
+}
+
+/// Whether `latest` is a newer version than `current` (e.g. "v0.9.5" vs "0.9.4"). Only the
+/// leading dotted numbers are compared, so suffixes like "-final" or " (Addon)" are ignored, and
+/// tags that are not version numbers never count as newer.
+pub fn is_newer_version(latest: &str, current: &str) -> bool {
+    match (version_numbers(latest), version_numbers(current)) {
+        (Some(latest), Some(current)) => latest > current,
+        _ => false,
+    }
+}
+
+fn version_numbers(version: &str) -> Option<Vec<u64>> {
+    let core: String = version
+        .trim()
+        .trim_start_matches(['v', 'V'])
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    let mut parts = core
+        .split('.')
+        .filter(|part| !part.is_empty())
+        .map(|part| part.parse().ok())
+        .collect::<Option<Vec<u64>>>()?;
+    // "1.0.0" and "1.0" are the same version.
+    while parts.len() > 1 && parts.last() == Some(&0) {
+        parts.pop();
+    }
+    (!parts.is_empty()).then_some(parts)
+}
+
+/// Finds the newest ReShade add-on build linked from the reshade.me homepage.
+pub fn parse_reshade_latest_version(html: &str) -> Option<String> {
+    let link = Regex::new(r"ReShade_Setup_(\d+(?:\.\d+)+)_Addon\.exe").unwrap();
+    link.captures_iter(html)
+        .map(|cap| cap[1].to_string())
+        .max_by_key(|version| version_numbers(version).unwrap_or_default())
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
+/// Formats seconds since the Unix epoch as `YYYY-MM-DD HH:MM UTC`.
+pub fn format_utc(unix_secs: u64) -> String {
+    // Civil-from-days conversion (Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms").
+    let days = (unix_secs / 86_400) as i64 + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+
+    let seconds_of_day = unix_secs % 86_400;
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02} UTC",
+        seconds_of_day / 3_600,
+        seconds_of_day % 3_600 / 60
+    )
 }

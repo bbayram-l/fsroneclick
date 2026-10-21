@@ -11919,6 +11919,16 @@ static FSR_REDSTONE_DB: &[FsrRedstoneEntry] = &[
 
 use std::sync::RwLock;
 
+/// Number of titles in the embedded OptiScaler compatibility list.
+pub fn embedded_optiscaler_count() -> usize {
+    OPTISCALER_COMPAT_DB.len()
+}
+
+/// Number of titles in the embedded AMD FSR "Redstone" catalog.
+pub fn embedded_redstone_count() -> usize {
+    FSR_REDSTONE_DB.len()
+}
+
 static DYNAMIC_ENTRIES: RwLock<Vec<crate::updater::CachedCompatEntry>> = RwLock::new(Vec::new());
 
 /// Loads dynamic compatibility entries into runtime memory (e.g. from local cache or online sync).

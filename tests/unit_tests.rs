@@ -46,7 +46,7 @@ fn test_renodx_matching() {
 fn test_optiscaler_ini_generation_rdna3() {
     let config = InstallConfig {
         enable_frame_generation: true,
-        enable_fsr4_int8: true,
+        enable_fsr4: true,
         enable_reshade: true,
         ..InstallConfig::default()
     };
@@ -58,7 +58,11 @@ fn test_optiscaler_ini_generation_rdna3() {
     assert!(ini.contains("Dx11Upscaler = fsr31"));
     assert!(
         ini.contains("Fsr4Update = true"),
-        "RDNA 3 must have Fsr4Update enabled for INT8 acceleration"
+        "RDNA 3 must upgrade FSR 3.1 to FSR 4"
+    );
+    assert!(
+        ini.contains("Fsr4ForceEnableInt8 = true"),
+        "RDNA 3 has no FP8 support, so FSR 4 needs the INT8 model"
     );
     assert!(
         ini.contains("Enabled = true"),
@@ -70,13 +74,41 @@ fn test_optiscaler_ini_generation_rdna3() {
         ini.contains("LoadReshade = true"),
         "ReShade plugin loading must be enabled"
     );
-    assert!(ini.contains("ReshadePath = ReShade64.dll"));
+}
+
+#[test]
+fn test_optiscaler_ini_generation_rdna4() {
+    let config = InstallConfig::default();
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+
+    let ini = generate_optiscaler_ini(&config, &Arch::Rdna4, &compat);
+
+    assert!(ini.contains("Fsr4Update = true"));
+    assert!(
+        ini.contains("Fsr4ForceEnableInt8 = false"),
+        "RDNA 4 runs the native FP8 model"
+    );
+}
+
+#[test]
+fn test_optiscaler_ini_fsr4_can_be_turned_off() {
+    let config = InstallConfig {
+        enable_fsr4: false,
+        ..InstallConfig::default()
+    };
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+
+    for arch in [Arch::Rdna4, Arch::Rdna3] {
+        let ini = generate_optiscaler_ini(&config, &arch, &compat);
+        assert!(ini.contains("Fsr4Update = false"), "{arch:?}");
+        assert!(ini.contains("Fsr4ForceEnableInt8 = false"), "{arch:?}");
+    }
 }
 
 #[test]
 fn test_optiscaler_ini_generation_non_rdna3() {
     let config = InstallConfig {
-        enable_fsr4_int8: true,
+        enable_fsr4: true,
         ..InstallConfig::default()
     };
     let compat = fsroneclick::compatibility::CompatibilityProfile::default();
@@ -85,8 +117,115 @@ fn test_optiscaler_ini_generation_non_rdna3() {
 
     assert!(
         ini.contains("Fsr4Update = false"),
-        "Non-RDNA 3 should not auto-enable INT8 update"
+        "GPUs without FSR 4 support keep FSR 3.1"
     );
+    assert!(ini.contains("Fsr4ForceEnableInt8 = false"));
+}
+
+#[test]
+fn test_optiscaler_ini_only_uses_keys_optiscaler_reads() {
+    let config = InstallConfig::default();
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+
+    // Every setting FSRoneclick writes, checked by hand against the OptiScaler.ini shipped with
+    // OptiScaler v0.9.4. OptiScaler silently ignores unknown keys, so a typo would go unnoticed.
+    // When adding a setting, confirm it exists in that release before extending this list.
+    const KNOWN: &[(&str, &[&str])] = &[
+        (
+            "Upscalers",
+            &["Dx11Upscaler", "Dx12Upscaler", "VulkanUpscaler"],
+        ),
+        (
+            "FrameGen",
+            &["Enabled", "FGInput", "FGOutput", "PreserveSwapChain"],
+        ),
+        (
+            "FSR",
+            &[
+                "Fsr4Update",
+                "Fsr4ForceEnableInt8",
+                "Fsr4EnableWatermark",
+                "FsrAgilitySDKUpgrade",
+                "FsrNonLinearColorSpace",
+            ],
+        ),
+        ("FSRFG", &["EnableWatermark"]),
+        (
+            "InitFlags",
+            &[
+                "AutoExposure",
+                "HDR",
+                "DepthInverted",
+                "JitterCancellation",
+                "DisplayResolution",
+                "DisableReactiveMask",
+            ],
+        ),
+        ("Plugins", &["LoadAsiPlugins", "LoadReshade"]),
+        ("Spoofing", &["Dxgi", "StreamlineSpoofing"]),
+        (
+            "Inputs",
+            &[
+                "EnableDlssInputs",
+                "EnableXeSSInputs",
+                "EnableFsr2Inputs",
+                "EnableFsr3Inputs",
+                "Fsr2Pattern",
+                "Fsr3Pattern",
+                "EnableFfxInputs",
+                "UseFfxInputs",
+            ],
+        ),
+        (
+            "Log",
+            &["LogToFile", "LogLevel", "SingleFile", "LogFileName"],
+        ),
+        (
+            "Hotfix",
+            &["ColorResourceBarrier", "MotionVectorResourceBarrier"],
+        ),
+    ];
+
+    let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
+
+    let mut section = "";
+    for line in ini.lines().map(str::trim) {
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = name;
+            assert!(
+                KNOWN.iter().any(|(s, _)| *s == section),
+                "[{section}] is not an OptiScaler v0.9.4 section"
+            );
+        } else if let Some((key, _)) = line.split_once('=') {
+            let key = key.trim();
+            let keys = KNOWN
+                .iter()
+                .find(|(s, _)| *s == section)
+                .map_or(&[][..], |(_, k)| *k);
+            assert!(
+                keys.contains(&key),
+                "[{section}] {key} is not an OptiScaler v0.9.4 setting"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_gpu_classification() {
+    use fsroneclick::gpu::classify_adapter;
+
+    for (name, arch) in [
+        ("AMD Radeon RX 9070 XT", Arch::Rdna4),
+        ("AMD Radeon RX 9060 XT", Arch::Rdna4),
+        ("AMD Radeon AI PRO R9700", Arch::Rdna4),
+        ("AMD Radeon RX 7800 XT", Arch::Rdna3),
+        ("AMD Radeon RX 6700 XT", Arch::Rdna2),
+        ("AMD Radeon RX 5700 XT", Arch::OtherAmd),
+        ("NVIDIA GeForce RTX 4070", Arch::Nvidia),
+        ("Intel(R) Arc(TM) A770 Graphics", Arch::IntelArc),
+    ] {
+        assert_eq!(classify_adapter(name), arch, "{name}");
+    }
 }
 
 #[test]
@@ -105,7 +244,10 @@ fn test_optiscaler_ini_auto_tuning() {
 
     assert!(ini.contains("AutoExposure = true"));
     assert!(ini.contains("FsrNonLinearColorSpace = true"));
-    assert!(ini.contains("SpoofNvidia = false"));
+    assert!(
+        ini.contains("Dxgi = false"),
+        "disable_spoofing turns off DXGI spoofing"
+    );
     assert!(ini.contains("Fsr2Pattern = true"));
     assert!(
         ini.contains("LoadAsiPlugins = true"),

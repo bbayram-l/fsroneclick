@@ -78,7 +78,9 @@ pub fn parse_mods_catalog(markdown: &str) -> HashMap<String, RenoDxMod> {
     catalog
 }
 
-/// Returns the add-on's file name when `url` is an HTTPS download from GitHub.
+/// Returns the add-on's file name when `url` is an HTTPS download from GitHub: a release asset
+/// on github.com (`/<owner>/<repo>/releases/download/<tag>/<file>`) or a file on a GitHub Pages
+/// site. Other github.com paths are refused because anyone can upload issue attachments there.
 ///
 /// The URL is checked with the parser the HTTP client uses, so the host that is checked is the
 /// host that gets contacted. Userinfo, ports, queries, fragments, and backslashes (which URL
@@ -101,10 +103,12 @@ fn github_addon_file_name(url: &str) -> Option<String> {
         .host_str()?
         .trim_end_matches('.')
         .to_ascii_lowercase();
-    if host != "github.com" && !host.ends_with(".github.io") {
+    let segments: Vec<&str> = parsed.path_segments()?.collect();
+    let is_release_asset = segments.len() == 6 && segments[2..4] == ["releases", "download"];
+    if !((host == "github.com" && is_release_asset) || host.ends_with(".github.io")) {
         return None;
     }
-    let name = parsed.path_segments()?.next_back()?;
+    let name = *segments.last()?;
     is_plain_addon_name(name).then(|| name.to_string())
 }
 

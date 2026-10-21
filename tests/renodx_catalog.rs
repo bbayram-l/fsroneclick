@@ -15,6 +15,8 @@ const WIKI: &str = r#"
 | Query Host | x | [![Snapshot](https://img.shields.io/x)](https://evil.example?.github.io/renodx-query.addon64) | ok |
 | Fragment Host | x | [![Snapshot](https://img.shields.io/x)](https://evil.example#.github.io/renodx-fragment.addon64) | ok |
 | Userinfo Host | x | [![Snapshot](https://img.shields.io/x)](https://x.github.io@evil.example/renodx-userinfo.addon64) | ok |
+| Issue Attachment | x | [![Snapshot](https://img.shields.io/x)](https://github.com/user-attachments/files/123/renodx-attachment.addon64) | ok |
+| Repo File | x | [![Snapshot](https://img.shields.io/x)](https://github.com/someone/renodx/raw/main/renodx-repofile.addon64) | ok |
 "#;
 
 #[test]
@@ -65,4 +67,14 @@ fn rejects_urls_whose_real_host_is_not_github() {
     for key in ["backslashhost", "queryhost", "fragmenthost", "userinfohost"] {
         assert!(!catalog.contains_key(key), "{key} must be rejected");
     }
+}
+
+#[test]
+fn github_com_downloads_must_be_release_assets() {
+    let catalog = parse_mods_catalog(WIKI);
+
+    // Anyone can upload issue attachments to github.com; only release assets are accepted.
+    assert!(!catalog.contains_key("issueattachment"));
+    assert!(!catalog.contains_key("repofile"));
+    assert!(catalog.contains_key("007firstlight"));
 }
