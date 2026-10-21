@@ -1,0 +1,62 @@
+name: Bug report
+description: FSRoneclick crashed, failed to install/uninstall, or did something unexpected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! If the game launches but upscaling or frame generation misbehaves in-game,
+        the cause is often OptiScaler itself — please also check the
+        [OptiScaler issue tracker](https://github.com/optiscaler/OptiScaler/issues).
+  - type: input
+    id: version
+    attributes:
+      label: FSRoneclick version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and store
+      placeholder: Cyberpunk 2077 (Steam)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: GPU, driver, and Windows version
+      placeholder: Radeon RX 7800 XT, Adrenalin 26.6.2, Windows 11 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How did you run it?
+      options:
+        - GUI
+        - CLI
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Select the game
+        2. Click "Install Enhancements"
+        3. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste the GUI "Execution Log" (Copy Output button) or CLI output, and `OptiScaler.log`
+        from the game folder if it exists. Remove anything personal (user names in paths).
+      render: text

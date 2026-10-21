@@ -2,6 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $distDir = "dist\fsroneclick"
 $releaseDir = "releases"
+$version = (Select-String -Path "Cargo.toml" -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+$zipName = "fsroneclick-v$version-windows-x64.zip"
 
 if (Test-Path $distDir) {
     Remove-Item -Recurse -Force $distDir
@@ -17,7 +19,7 @@ Copy-Item "README.md" -Destination "$distDir\README.md"
 Copy-Item "LICENSE" -Destination "$distDir\LICENSE"
 Copy-Item "THIRD_PARTY_LICENSES.md" -Destination "$distDir\THIRD_PARTY_LICENSES.md"
 
-$zipFile = "$releaseDir\fsroneclick-v0.1.0-windows-x64.zip"
+$zipFile = "$releaseDir\$zipName"
 if (Test-Path $zipFile) {
     Remove-Item -Force $zipFile
 }
@@ -25,7 +27,7 @@ if (Test-Path $zipFile) {
 Compress-Archive -Path "$distDir\*" -DestinationPath $zipFile -Force
 
 $zipHash = (Get-FileHash -Path $zipFile -Algorithm SHA256).Hash.ToLower()
-"$zipHash  fsroneclick-v0.1.0-windows-x64.zip" | Out-File -Encoding ascii -FilePath "$zipFile.sha256"
+"$zipHash  $zipName" | Out-File -Encoding ascii -FilePath "$zipFile.sha256"
 
 # Also copy the standalone exe directly to releases so users can download it without unzipping
 Copy-Item "target\release\fsroneclick.exe" -Destination "$releaseDir\fsroneclick.exe"
