@@ -41,6 +41,9 @@ All notable changes to this project are documented here. The format follows
   releases are compared numerically, the compatibility list shows when it was last synced, and rows without an
   online source say *Not checked* instead of claiming to be current.
 
+- CLI output piped into a command that stops reading early (e.g. `fsroneclick --list-games | head`) no longer
+  crashes; the command finishes and reports its real exit code.
+- The game library scan is about 5× faster (3.6 s → 0.7 s for 75 games here) with identical results.
 
 ### Changed
 

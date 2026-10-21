@@ -1,8 +1,10 @@
 //! Game discovery, executable inspection, graphics API detection, and mod status tracking.
 
 use crate::fidelityfx::{FidelityFxCatalog, FidelityFxTier};
+use regex::bytes::RegexSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 pub const OPTI_PROXY: &str = "dxgi.dll";
 pub const RESHADE_DLL: &str = "ReShade64.dll";
@@ -682,13 +684,24 @@ fn find_exes_recursive(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec
     };
     for entry in entries.flatten() {
         let p = entry.path();
-        if p.is_file() {
+        // The directory listing already says whether an entry is a file or a folder; asking the
+        // file system again for every entry made scans of large game folders take seconds.
+        // Links and junctions are still resolved, so they are followed as before.
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let (is_file, is_dir) = if file_type.is_symlink() {
+            (p.is_file(), p.is_dir())
+        } else {
+            (file_type.is_file(), file_type.is_dir())
+        };
+        if is_file {
             if let Some(ext) = p.extension() {
                 if ext.eq_ignore_ascii_case("exe") {
                     out.push(p);
                 }
             }
-        } else if p.is_dir() {
+        } else if is_dir {
             let name = p
                 .file_name()
                 .unwrap_or_default()
@@ -713,6 +726,36 @@ fn find_exes_recursive(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec
             }
         }
     }
+}
+
+/// DLL names looked for in executables, as indexes into [`referenced_dlls`]'s result.
+const REFERENCED_DLLS: [&str; 6] = [
+    "d3d12.dll",
+    "d3d11.dll",
+    "vulkan-1.dll",
+    "d3d9.dll",
+    "nvngx_dlss.dll",
+    "sl.interactor.dll",
+];
+const D3D12: usize = 0;
+const D3D11: usize = 1;
+const VULKAN: usize = 2;
+const D3D9: usize = 3;
+const DLSS: usize = 4;
+const STREAMLINE: usize = 5;
+
+/// Which of [`REFERENCED_DLLS`] appear in `data` (ASCII case-insensitive), found in one pass.
+fn referenced_dlls(data: &[u8]) -> [bool; REFERENCED_DLLS.len()] {
+    static NAMES: LazyLock<RegexSet> = LazyLock::new(|| {
+        RegexSet::new(
+            REFERENCED_DLLS
+                .iter()
+                .map(|name| format!("(?i-u){}", regex::escape(name))),
+        )
+        .expect("DLL name patterns are valid")
+    });
+    let matches = NAMES.matches(data);
+    std::array::from_fn(|i| matches.matched(i))
 }
 
 /// Parses the PE binary to determine: GraphicsApi, 64-bit status, and native DLSS presence.
@@ -761,17 +804,13 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
     let machine = u16::from_le_bytes([data[pe_offset + 4], data[pe_offset + 5]]);
     let is_64bit = machine == 0x8664 || machine == 0xAA64; // AMD64 or ARM64
 
-    let contains_ci = |needle: &[u8]| -> bool {
-        data.windows(needle.len())
-            .any(|w| w.eq_ignore_ascii_case(needle))
-    };
+    let imports = referenced_dlls(data);
+    let mut imported_d3d12 = imports[D3D12] || has_d3d12_agility;
+    let mut imported_d3d11 = imports[D3D11];
+    let imported_vulkan = imports[VULKAN];
+    let imported_d3d9 = imports[D3D9];
 
-    let mut imported_d3d12 = contains_ci(b"d3d12.dll") || has_d3d12_agility;
-    let mut imported_d3d11 = contains_ci(b"d3d11.dll");
-    let imported_vulkan = contains_ci(b"vulkan-1.dll");
-    let imported_d3d9 = contains_ci(b"d3d9.dll");
-
-    if contains_ci(b"nvngx_dlss.dll") || contains_ci(b"sl.interactor.dll") {
+    if imports[DLSS] || imports[STREAMLINE] {
         has_dlss = true;
     }
 
@@ -794,15 +833,10 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
                         if let Ok(mut comp_file) = fs::File::open(&p) {
                             let mut comp_buf = vec![0u8; 1024 * 1024];
                             let comp_read = comp_file.read(&mut comp_buf).unwrap_or(0);
-                            let comp_data = &comp_buf[..comp_read];
-                            let comp_ci = |needle: &[u8]| {
-                                comp_data
-                                    .windows(needle.len())
-                                    .any(|w| w.eq_ignore_ascii_case(needle))
-                            };
-                            if comp_ci(b"d3d12.dll") {
+                            let comp_imports = referenced_dlls(&comp_buf[..comp_read]);
+                            if comp_imports[D3D12] {
                                 imported_d3d12 = true;
-                            } else if comp_ci(b"d3d11.dll") || name == "d3dcompiler_47.dll" {
+                            } else if comp_imports[D3D11] || name == "d3dcompiler_47.dll" {
                                 imported_d3d11 = true;
                             }
                         }
