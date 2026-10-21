@@ -8,6 +8,13 @@ Automated deployment and runtime orchestrator for AMD FSR 3.1 / 4.1.1 "Redstone"
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-informational.svg?style=flat-square)](https://github.com/bbayram-l/fsroneclick)
 [![No Runtime Needed](https://img.shields.io/badge/Dependencies-None%20(Standalone%20EXE)-success.svg?style=flat-square)](https://github.com/bbayram-l/fsroneclick/releases)
 
+FSRoneclick finds the PC games installed on your machine and, in one click, installs and configures
+[OptiScaler](https://github.com/optiscaler/OptiScaler) so that games offering DLSS, XeSS, or FSR 2/3 run AMD FSR 3.1 or
+FSR 4 upscaling and FSR Frame Generation instead, on AMD, Intel, and NVIDIA GPUs alike. It can also add ReShade with
+RenoDX native HDR and AMD CAS sharpening. Everything it places in a game folder can be removed again with one click.
+
+Inspired by [DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick) — see [Acknowledgments](#acknowledgments--credits).
+
 ---
 
 ## Download & Quick Start (No Rust Required)
@@ -25,6 +32,17 @@ FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows exe
 
 ---
 
+## Requirements
+
+- **Windows 10 or 11, 64-bit.** An internet connection is needed the first time each component is installed;
+  downloads are cached and verified for later installs.
+- **A 64-bit DirectX 11, DirectX 12, or Vulkan game.** To change the upscaler, the game must offer DLSS, XeSS, or
+  FSR 2/3 in its settings: OptiScaler replaces whichever one you pick. Frame generation additionally needs the game's
+  DLSS Frame Generation option. ReShade, RenoDX HDR, and CAS sharpening don't depend on either.
+- **Any GPU for FSR 3.1.** FSR 4 needs an AMD Radeon RX 7000 (RDNA 3) or RX 9000 (RDNA 4) series GPU.
+
+---
+
 ## Before You Start
 
 - **Single-player / offline only for protected games.** FSRoneclick installs DLL proxies (e.g. `dxgi.dll`) into game
@@ -36,47 +54,59 @@ FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows exe
 
 ---
 
-## Inspiration & Reference
+## Using FSRoneclick
 
-This project was inspired by **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)** by **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)**.
+### Install
 
-While *DLSS5oneclick* focuses on automating the installation of the DLSS 5 Feeder / ReShade add-on pipeline for NVIDIA setups, **FSRoneclick** adopts a similar automated GUI and CLI workflow tailored for **[OptiScaler](https://github.com/optiscaler/OptiScaler)**, **AMD FSR 3.1 / 4.1.1 "Redstone"**, Frame Generation, and AMD Radeon (RDNA 3 / RDNA 2) as well as universal GPU configurations.
+1. Open **FSRoneclick**. It scans your Steam libraries, Epic Games Launcher installs, and common game folders in the
+   background, and lists what it finds on the left.
+   - Game missing? Click **Rescan**, or open **Add Custom Game Directory** and enter the folder that contains the
+     game's `.exe` (for example `D:\Games\Far Cry 5\bin`).
+2. Select the game and review the **Engine & System Analysis**: graphics API, anti-cheat, the community compatibility
+   status, and any recommended workarounds, which FSRoneclick applies automatically.
+3. Choose the **Enhancement Options** and click **Install Enhancements**.
+4. Launch the game the way you normally do (Steam, Epic, or the game's executable).
+5. In the game's **Video / Display** settings:
+   - Set the upscaler to **DLSS** (or XeSS / FSR if DLSS isn't offered). OptiScaler runs AMD FSR 3.1 or FSR 4 in its place.
+   - If the game has **DLSS Frame Generation**, turn it on to get AMD FSR Frame Generation.
 
----
+### In-Game Keys
 
-## Overview
+| Key | Action |
+|---|---|
+| `Insert` | Open the OptiScaler menu (upscaler, sharpness, frame generation, and more) |
+| `End` | Turn OptiScaler frame generation on or off |
+| `Page Up` / `Page Down` | Show OptiScaler's FPS overlay / cycle its style |
+| `Home` | Open the ReShade overlay (shader effects, RenoDX HDR settings) |
 
-**FSRoneclick** automates the installation, configuration, and maintenance of AMD FidelityFX Super Resolution (FSR 3.1 and FSR 4.1.1 "Redstone"), Frame Generation, ReShade, and RenoDX HDR for PC games.
+### Change Settings or Uninstall
 
-PC games often lock Frame Generation or advanced upscalers behind proprietary hardware checks (e.g. requiring RTX 40/50 series GPUs). FSRoneclick works around these restrictions:
-- Automatically detects installed games in Steam libraries, the Epic Games Launcher, and common standalone folders (`C:\Games`, `D:\Games`, `E:\Games`, `GOG Games`).
-- Automatically pairs the game executable with the optimal proxy hook (`dxgi.dll`, `winmm.dll`, `d3d12.dll`, or `version.dll`).
-- Deploys **OptiPatcher** for games where it is known to help, to neutralize vendor checks that crash games when DLSS Frame Generation is enabled.
-- Auto-generates `OptiScaler.ini` configurations tuned for your GPU architecture and the game's known workarounds.
-- Deploys **ReShade 6.4.1** and **RenoDX** for native HDR, plus AMD FidelityFX CAS sharpening.
-- Disables watermark overlays and debug banners by default for a clean presentation.
+Once a game has enhancements installed, its page shows **Update Configuration**, which re-applies your current
+options, and **Uninstall Enhancements**, which removes every file FSRoneclick placed and restores any game file it had
+replaced. Close the game before uninstalling.
 
 ---
 
 ## Key Features
 
 ### Automated Detection & Smart Injection
-- **Library Scanner**: Finds every Steam library listed in `libraryfolders.vdf` (Steam's install location is read from the registry), Epic Games Launcher installs, and games in common non-store folders.
+- **Library Scanner**: Finds every Steam library listed in `libraryfolders.vdf` (Steam's install location is read from the registry), Epic Games Launcher installs, and games in common non-store folders (`C:\Games`, `D:\Games`, `E:\Games`, `GOG Games`).
 - **Binary Targeting**: Targets the real engine binary inside subdirectories (e.g. `FarCry5.exe` inside `bin\`) rather than launcher wrappers.
-- **Hook Strategy Selection**: Uses the proxy hook recommended by the community compatibility list to avoid launch crashes.
+- **Hook Strategy Selection**: Installs OptiScaler as the proxy DLL (`dxgi.dll`, `winmm.dll`, `d3d12.dll`, or `version.dll`) the community compatibility list recommends for the game, to avoid launch crashes.
+- **Per-Game Tuning**: Generates `OptiScaler.ini` with the game's known workarounds (auto exposure, color space, GPU spoofing, FSR 2 pattern matching) and with the FSR watermarks turned off.
 
 ### Hardware-Aware Optimization
 - **RDNA 4 / RX 9000**: Upgrades games to FSR 4.1.1 running its native FP8 model (`Fsr4Update`).
 - **RDNA 3 / RX 7000**: Upgrades games to FSR 4.1.1 using OptiScaler's INT8 model (`Fsr4Update` + `Fsr4ForceEnableInt8`).
 - **Universal Fallback**: Uses FSR 3.1 for RDNA 2, Intel Arc, NVIDIA, and other GPUs.
 - The GPU is identified from the display adapter information Windows records; FSR 4 can be switched off in the app.
-- **Clean Display**: Watermark flags (`Fsr4EnableWatermark = false`, `EnableWatermark = false`) are disabled by default.
 
 ### Crash Prevention & Vendor-Lock Bypass
-- **OptiPatcher Integration**: Deploys `OptiPatcher.asi` (with ASI loading enabled in OptiScaler) for games where the compatibility list marks it as supported.
+- **OptiPatcher Integration**: Deploys `OptiPatcher.asi` (with ASI loading enabled in OptiScaler) for games where the compatibility list marks it as supported, to neutralize vendor checks that crash games when DLSS Frame Generation is enabled on non-RTX GPUs.
 - **Companion Libraries**: Stages the supporting runtimes shipped in the OptiScaler package (fakenvapi, dlssg-to-fsr3, AMD FidelityFX and Intel XeSS DLLs, D3D12 Agility SDK).
 
 ### Visual Enhancement & HDR
+- **ReShade 6.4.1**: Installs the add-on build of ReShade, loaded by OptiScaler alongside FSR.
 - **AMD FidelityFX CAS**: Installs the Contrast Adaptive Sharpening ReShade shader, with an embedded copy used when it cannot be downloaded.
 - **RenoDX Native HDR**: Matches the game against the live RenoDX mod catalog and installs the game-specific HDR add-on for ReShade.
 - **REFramework**: Stages REFramework automatically for Capcom RE Engine games.
@@ -93,7 +123,7 @@ PC games often lock Frame Generation or advanced upscalers behind proprietary ha
 - RenoDX add-ons and ReShade shader headers have no published checksums. They are only fetched over HTTPS from GitHub, and RenoDX add-ons are refreshed on every install.
 
 ### Safe & Non-Destructive
-- **Manifest-Driven Clean Rollback**: Every placed file is recorded in `.fsroneclick-manifest`. Uninstall removes only those files.
+- **Manifest-Driven Clean Rollback**: Every placed file is recorded in `.fsroneclick-manifest` as it is written, so even an interrupted install can be undone. Uninstall removes only those files.
 - **Original Files Preserved**: If a game already ships a file FSRoneclick needs to replace (for example its own `amd_fidelityfx_dx12.dll`), the original is kept as `<name>.fsroneclick-backup` and restored on uninstall.
 - **Safe to Retry**: If a file is in use (the game is still running), uninstall says so and keeps it in the manifest; close the game and uninstall again.
 
@@ -111,23 +141,10 @@ Downloads come from GitHub (OptiScaler, OptiPatcher, REFramework, RenoDX, shader
 
 ---
 
-## In-Game Usage
-
-1. Open **FSRoneclick** and select your game from the list.
-2. Verify the recommended configuration (GPU architecture, hook type, and add-ons) and click **Install Enhancements**.
-3. Launch the game through your normal launcher (Steam, Epic, or game executable).
-4. In the game's **Video / Display Settings**:
-   - Set **Upscaling** to **DLSS** (OptiScaler intercepts this call and executes AMD FSR 3.1/4.1.1).
-   - Set **Frame Generation** to **DLSS Frame Generation** or **ON** (intercepted and executed via FSR Frame Generation).
-5. Default In-Game Keybindings:
-   - `Insert` or `F12`: Toggle OptiScaler in-game configuration menu.
-   - `Home`: Toggle ReShade overlay and shader pipeline.
-
----
-
 ## Command Line Interface (CLI)
 
-FSRoneclick can also be executed headlessly for scripting or automation. Commands exit with code `0` on success and `1` on failure.
+FSRoneclick can also be run from a terminal for scripting or automation. Without arguments it opens the app.
+Commands exit with code `0` on success and `1` on failure.
 
 ```bash
 # List all detected games and their installation status
@@ -142,12 +159,32 @@ fsroneclick.exe --install "D:\Games\Far Cry 5\bin"
 # Uninstall injected files and restore stock game state
 fsroneclick.exe --remove "D:\Games\Far Cry 5\bin"
 
-# Show component versions and check GitHub for a newer OptiScaler release
+# Show component versions and check for newer OptiScaler, ReShade, and FSRoneclick releases
 fsroneclick.exe --check-updates
 
 # Synchronize local compatibility database with upstream community sources
 fsroneclick.exe --update-compat
 ```
+
+---
+
+## Troubleshooting
+
+- **A game isn't listed.** Click **Rescan**. Games outside Steam, Epic, and the common game folders can be added
+  with **Add Custom Game Directory** (or installed directly with `--install <folder>`).
+- **The game crashes at launch, or nothing changes in-game.** Uninstall restores the game folder. Check
+  `OptiScaler.log` in the game's folder, and look the game up in the
+  [OptiScaler Compatibility List](https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List) for known issues.
+- **DLSS is greyed out on an AMD or Intel GPU.** FSRoneclick enables OptiScaler's GPU spoofing so games offer DLSS,
+  unless the compatibility list says spoofing breaks that game. If DLSS still isn't offered, pick XeSS or FSR instead.
+- **Uninstall says a file could not be removed.** The game (or its launcher) still has it open. Close it and run
+  uninstall again; nothing is lost in between.
+- **An antivirus removed a DLL.** Some antivirus products flag proxy DLLs such as `dxgi.dll`. Every runtime
+  FSRoneclick installs is checksum-verified first (see [Verified Downloads](#verified-downloads)).
+- **Start fresh or reclaim disk space.** Delete `%LOCALAPPDATA%\FSRoneclick\cache`; components are downloaded and
+  verified again on the next install.
+- **Reporting a problem.** Use the [bug report form](https://github.com/bbayram-l/fsroneclick/issues/new/choose) and
+  include the app's **Execution Log** (**Copy Output**) or the CLI output, plus `OptiScaler.log` if there is one.
 
 ---
 
@@ -165,14 +202,18 @@ fsroneclick.exe --update-compat
 git clone https://github.com/bbayram-l/fsroneclick.git
 cd fsroneclick
 
-# Run the test suite (INI generation, compatibility lookups, wiki parsing, install/uninstall rollback)
+# Run the app from source
+cargo run
+
+# Run the test suite (INI generation, download verification, compatibility lookups, install/uninstall rollback)
 cargo test
 
 # Build optimized release binary
 cargo build --release
 ```
 
-The standalone executable will be generated at `target/release/fsroneclick.exe`.
+The standalone executable will be generated at `target/release/fsroneclick.exe`. Before opening a pull request, also
+run `cargo fmt --all --check` and `cargo clippy --all-targets -- -D warnings`, as CI does.
 
 ---
 
@@ -185,6 +226,14 @@ Please report security issues privately as described in [SECURITY.md](SECURITY.m
 ---
 
 ## Acknowledgments & Credits
+
+### Inspiration & Reference
+
+This project was inspired by **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)** by **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)**.
+
+While *DLSS5oneclick* focuses on automating the installation of the DLSS 5 Feeder / ReShade add-on pipeline for NVIDIA setups, **FSRoneclick** adopts a similar automated GUI and CLI workflow tailored for **[OptiScaler](https://github.com/optiscaler/OptiScaler)**, **AMD FSR 3.1 / 4.1.1 "Redstone"**, Frame Generation, and AMD Radeon (RDNA 4 / RDNA 3 / RDNA 2) as well as universal GPU configurations.
+
+### Credits
 
 This tool automates, coordinates, and configures the work of several brilliant open-source projects and researchers. The credit belongs to:
 

@@ -22,6 +22,8 @@ All notable changes to this project are documented here. The format follows
   Previously only `Fsr4Update` was set, which RDNA 3 cannot run without the INT8 model.
 - `OptiScaler.ini` no longer contains settings OptiScaler v0.9.4 does not have (`[General]`, `SpoofNvidia`,
   `SpoofGpu`, `ReshadePath`).
+- The in-app keybinding guide listed `F12` (not an OptiScaler key) and said `End` toggles ReShade; in OptiScaler
+  v0.9.4 `End` toggles frame generation and `Page Up` / `Page Down` control the FPS overlay.
 - REFramework and OptiPatcher were cached forever after the first download; new upstream builds are now picked up.
 - RenoDX add-ons are refreshed on every install (snapshots are rebuilt in place), and two add-ons with the same file
   name from different sources no longer share a cache entry.
@@ -38,6 +40,7 @@ All notable changes to this project are documented here. The format follows
 - *Component Status* / `--check-updates` rows are real checks now: the latest OptiScaler, ReShade, and FSRoneclick
   releases are compared numerically, the compatibility list shows when it was last synced, and rows without an
   online source say *Not checked* instead of claiming to be current.
+
 
 ### Changed
 

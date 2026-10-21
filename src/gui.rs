@@ -952,7 +952,7 @@ impl FSRoneclickApp {
                             ui.label("• Click 'Install Enhancements'. All proxy libraries, Agility SDK runtimes, ASI patchers, and configuration files are deployed instantly.");
                             ui.add_space(6.0);
                             ui.label(RichText::new("5. In-Game Configuration").strong());
-                            ui.label("• Launch your game normally.\n• In Video / Display options, enable 'DLSS' (now powered by FSR 3.1 / FSR 4 INT8).\n• Enable 'DLSS Frame Generation' (now running AMD FSR Frame Generation).\n• Press 'Insert' or 'F12' to open OptiScaler overlay, and 'Home' to access ReShade/RenoDX.");
+                            ui.label("• Launch your game normally.\n• In Video / Display options, enable 'DLSS' (now powered by FSR 3.1 / FSR 4), or XeSS / FSR if DLSS isn't offered.\n• Enable 'DLSS Frame Generation' if the game has it (now running AMD FSR Frame Generation).\n• Press 'Insert' to open the OptiScaler overlay, and 'Home' to access ReShade/RenoDX.");
                         }
                         1 => {
                             ui.heading("Architecture Tuning: AMD Radeon RX 7000 / RDNA 3");
@@ -980,16 +980,20 @@ impl FSRoneclickApp {
                             ui.add_space(6.0);
                             ui.group(|ui| {
                                 egui::Grid::new("hotkeys_grid").num_columns(2).spacing([24.0, 10.0]).show(ui, |ui| {
-                                    ui.label(RichText::new("Insert / F12").strong().color(Color32::from_rgb(100, 200, 255)));
+                                    ui.label(RichText::new("Insert").strong().color(Color32::from_rgb(100, 200, 255)));
                                     ui.label("Toggle OptiScaler In-Game Menu (Upscaler backend, Sharpness, Frame Gen, Motion Vectors)");
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("End").strong().color(Color32::from_rgb(100, 200, 255)));
+                                    ui.label("Turn OptiScaler Frame Generation on / off");
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Page Up / Page Down").strong().color(Color32::from_rgb(100, 200, 255)));
+                                    ui.label("Show the OptiScaler FPS overlay / cycle its style");
                                     ui.end_row();
 
                                     ui.label(RichText::new("Home").strong().color(Color32::from_rgb(255, 180, 80)));
                                     ui.label("Toggle ReShade Menu (Shader effects, RenoDX HDR calibration, Peak Nits, White Point)");
-                                    ui.end_row();
-
-                                    ui.label(RichText::new("End / Shift+F12").strong().color(Color32::from_rgb(180, 180, 180)));
-                                    ui.label("Toggle ReShade post-processing pipeline on / off");
                                     ui.end_row();
                                 });
                             });
