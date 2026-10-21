@@ -18,11 +18,13 @@ pub const OPTISCALER_DIRECT_URL: &str =
 pub const OPTISCALER_SHA256: &str =
     "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad";
 
-pub const RESHADE_VERSION: &str = "6.4.1";
+pub const RESHADE_VERSION: &str = "6.8.0";
 pub const RESHADE_ADDON_SETUP_URL: &str =
-    "https://reshade.me/downloads/ReShade_Setup_6.4.1_Addon.exe";
+    "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe";
+/// reshade.me publishes no checksums. This one was taken from a download signed with the same
+/// certificate as the previously pinned 6.4.1 (`CN=ReShade`, thumbprint 589690…C49F).
 pub const RESHADE_ADDON_SETUP_SHA256: &str =
-    "130800ad62ee9743f85f24542a7b97fd29b2c18d427f5ad3540cddfeb6ce6e62";
+    "afe4c8f13048306307983b8b3d41d5bf00a86820440b0e57dea10950e1176445";
 
 // Rolling downloads: always the latest release, verified against the SHA-256 GitHub publishes.
 pub const OPTIPATCHER_REPO: &str = "optiscaler/OptiPatcher";

@@ -35,7 +35,7 @@ from their official sources when you choose to install them, and each remains un
 
 ### [ReShade](https://reshade.me) and [reshade-shaders](https://github.com/crosire/reshade-shaders)
 - **Author**: [crosire](https://github.com/crosire) (Patrick Mours)
-- **Role**: Post-processing injector (add-on build 6.4.1) and the `ReShade.fxh` / `ReShadeUI.fxh` shader headers.
+- **Role**: Post-processing injector (add-on build 6.8.0) and the `ReShade.fxh` / `ReShadeUI.fxh` shader headers.
 - **License**: ReShade — BSD 3-Clause License; shader headers — CC0-1.0
 
 ### [RenoDX](https://github.com/clshortfuse/renodx)

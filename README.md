@@ -106,7 +106,7 @@ replaced. Close the game before uninstalling.
 - **Companion Libraries**: Stages the supporting runtimes shipped in the OptiScaler package (fakenvapi, dlssg-to-fsr3, AMD FidelityFX and Intel XeSS DLLs, D3D12 Agility SDK).
 
 ### Visual Enhancement & HDR
-- **ReShade 6.4.1**: Installs the add-on build of ReShade, loaded by OptiScaler alongside FSR.
+- **ReShade 6.8.0**: Installs the add-on build of ReShade, loaded by OptiScaler alongside FSR.
 - **AMD FidelityFX CAS**: Installs the Contrast Adaptive Sharpening ReShade shader, with an embedded copy used when it cannot be downloaded.
 - **RenoDX Native HDR**: Matches the game against the live RenoDX mod catalog and installs the game-specific HDR add-on for ReShade.
 - **REFramework**: Stages REFramework automatically for Capcom RE Engine games.

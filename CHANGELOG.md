@@ -44,6 +44,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- ReShade updated from 6.4.1 to 6.8.0 (add-on build, SHA-256 pinned).
 - Installing into a 32-bit game is refused, since OptiScaler and ReShade64 are 64-bit only.
 - The CLI exits with code `1` when a command fails and warns when anti-cheat is detected.
 - Steam libraries are located through the install path Steam records in the registry, in addition to the common
