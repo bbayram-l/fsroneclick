@@ -15,6 +15,8 @@ RenoDX native HDR and AMD CAS sharpening. Everything it places in a game folder 
 
 Inspired by [DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick) — see [Acknowledgments](#acknowledgments--credits).
 
+![FSRoneclick showing installed Steam games, with Ready or Not selected and its enhancement options visible](docs/images/steam-library.png)
+
 ---
 
 ## Download & Quick Start (No Rust Required)
