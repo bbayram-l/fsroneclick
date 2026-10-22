@@ -58,7 +58,7 @@ jobs:
           echo "EXE_SHA_PATH=fsroneclick.exe.sha256" >> $env:GITHUB_ENV
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
