@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -45,10 +45,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
+      # The version goes in `toolchain`, not the action ref: Dependabot treats a ref like
+      # `@1.88.0` as an action version and "updates" it to Rust releases that don't exist.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
