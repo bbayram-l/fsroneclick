@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- Unused direct `egui` dependency; the app uses egui through `eframe`.
+
+## [0.1.0] - 2026-10-21
+
+First public release: 1-click OptiScaler (FSR 3.1 / FSR 4 + Frame Generation), ReShade, RenoDX, and CAS deployment
+with a desktop GUI and CLI. The notes below describe what changed from the earlier, unpublished prototype.
+
 ### Fixed
 
 - Installing no longer destroys game files it replaces (for example a game's own `amd_fidelityfx_dx12.dll` or
@@ -40,7 +49,6 @@ All notable changes to this project are documented here. The format follows
 - *Component Status* / `--check-updates` rows are real checks now: the latest OptiScaler, ReShade, and FSRoneclick
   releases are compared numerically, the compatibility list shows when it was last synced, and rows without an
   online source say *Not checked* instead of claiming to be current.
-
 - CLI output piped into a command that stops reading early (e.g. `fsroneclick --list-games | head`) no longer
   crashes; the command finishes and reports its real exit code.
 - The game library scan is about 5× faster (3.6 s → 0.7 s for 75 games here) with identical results.
@@ -71,11 +79,6 @@ All notable changes to this project are documented here. The format follows
 ### Security
 
 - RenoDX downloads on github.com must be release assets, since anyone can upload issue attachments there.
-
-## [0.1.0] - 2026-09-13
-
-- Initial release: 1-click OptiScaler (FSR 3.1 / FSR 4 + Frame Generation), ReShade, RenoDX, and CAS deployment
-  with a desktop GUI and CLI.
 
 [Unreleased]: https://github.com/bbayram-l/fsroneclick/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/bbayram-l/fsroneclick/releases/tag/v0.1.0
