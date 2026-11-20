@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Optional **Apex Neural Rendering frame generation** (beta, ANR FG V.B20) for DirectX 12 games, in the GUI and with
+  `--install <folder> --anr-fg`. FSRoneclick downloads ANR's package, installs the OptiScaler build it ships and its
+  provider, and routes DLSS frame generation to it. A failed download falls back to AMD FSR Frame Generation.
 - Games with [AMDLSS5](https://github.com/Wehaveall/AMDLSS5) installed are marked in the game list and CLI, and
   FSRoneclick refuses to install into them instead of overwriting AMDLSS5's `version.dll` proxy.
 

@@ -73,7 +73,25 @@ FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows exe
 4. Launch the game the way you normally do (Steam, Epic, or the game's executable).
 5. In the game's **Video / Display** settings:
    - Set the upscaler to **DLSS** (or XeSS / FSR if DLSS isn't offered). OptiScaler runs AMD FSR 3.1 or FSR 4 in its place.
-   - If the game has **DLSS Frame Generation**, turn it on to get AMD FSR Frame Generation.
+   - If the game has **DLSS Frame Generation**, turn it on to get AMD FSR Frame Generation (or Apex Neural Rendering
+     frame generation, if you chose it).
+
+### Apex Neural Rendering Frame Generation (beta)
+
+In DirectX 12 games, **Enhancement Options** can use
+[Apex Neural Rendering (ANR)](https://github.com/apex-compute/ANR) frame generation by Apex Compute instead of AMD FSR
+Frame Generation (CLI: `--install <folder> --anr-fg`). It is a neural frame generator that works on AMD Radeon RX 5000
+and newer, NVIDIA GTX 16 / RTX 20 and newer, and Intel Arc. Its strength is set by `max_generated` in
+`OptiScaler\custom\Apex Neural Rendering FG\dlssg\nr_fg.ini`, up to 6x. Turn on **DLSS Frame Generation** in the game,
+and ANR takes its place.
+
+- FSRoneclick downloads ANR's package from its GitHub release (pinned to the version shown in the app and checked
+  against its SHA-256). That package brings its own build of OptiScaler, which can load custom frame generation
+  providers; FSRoneclick installs it in place of the OptiScaler release.
+- ANR is a beta, and its repository publishes no license yet. If its download fails, FSRoneclick installs AMD FSR Frame
+  Generation instead and says so. DirectX 11 and Vulkan games always get AMD FSR Frame Generation.
+- ANR needs the Microsoft Visual C++ 2015–2022 Redistributable (x64), which most PCs already have.
+- AMDLSS5's "Neural Apex" frame generation is the same ANR technology, bundled in AMDLSS5's own installer.
 
 ### In-Game Keys
 
@@ -245,6 +263,8 @@ This tool automates, coordinates, and configures the work of several brilliant o
 - **[Faisal Al-Kindi (faisalkindi)](https://github.com/faisalkindi)** — **[DLSS5oneclick](https://github.com/faisalkindi/DLSS5oneclick)**, for the inspiring desktop UI concept, library detection layout, and one-click automation workflow.
 - **[cdozdil](https://github.com/cdozdil)** and the **[OptiScaler team](https://github.com/optiscaler/OptiScaler)** — **[OptiScaler](https://github.com/optiscaler/OptiScaler)** (GPL-3.0), the middleware translating DLSS and XeSS API calls into AMD FSR 3.1, FSR 4.1.1 "Redstone", and Frame Generation, and **[OptiPatcher](https://github.com/optiscaler/OptiPatcher)** (MIT), which patches vendor checks that crash games when DLSS Frame Generation is requested on non-RTX GPUs.
 - The OptiScaler community, for the **[Compatibility List](https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List)** that FSRoneclick's per-game tuning is derived from.
+- **[Apex Compute](https://github.com/apex-compute)** — **[Apex Neural Rendering](https://github.com/apex-compute/ANR)**
+  (beta, no published license yet), the optional neural frame generation provider and the OptiScaler build it ships with.
 - **[Advanced Micro Devices (AMD)](https://www.amd.com)** — **[AMD FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** (MIT License), providing temporal upscaling, frame generation, and Contrast Adaptive Sharpening.
 - **[crosire](https://github.com/crosire)** — **[ReShade](https://reshade.me)** (BSD 3-Clause) and **[reshade-shaders](https://github.com/crosire/reshade-shaders)**, the injection framework and shader pipeline.
 - **[clshortfuse](https://github.com/clshortfuse)** and the RenoDX mod authors — **[RenoDX](https://github.com/clshortfuse/renodx)** (MIT), providing native HDR reconstruction and tonemapping add-ons.

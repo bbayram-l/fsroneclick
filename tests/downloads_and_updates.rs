@@ -308,7 +308,14 @@ fn pinned_downloads_are_consistent() {
     );
     assert!(OPTISCALER_DIRECT_URL.contains(&format!("/v{OPTISCALER_VERSION}/")));
     assert!(OPTISCALER_DIRECT_URL.contains(&format!("Optiscaler_{OPTISCALER_VERSION}")));
-    for sha256 in [OPTISCALER_SHA256, RESHADE_ADDON_SETUP_SHA256] {
+    use fsroneclick::installer::{ANR_FG_FULL_SHA256, ANR_FG_FULL_URL, ANR_FG_VERSION};
+    assert!(ANR_FG_FULL_URL.contains(&format!("/FG-{ANR_FG_VERSION}/")));
+    assert!(ANR_FG_FULL_URL.ends_with(&format!("anr-fg-{ANR_FG_VERSION}-full.zip")));
+    for sha256 in [
+        OPTISCALER_SHA256,
+        RESHADE_ADDON_SETUP_SHA256,
+        ANR_FG_FULL_SHA256,
+    ] {
         assert!(sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
@@ -343,4 +350,74 @@ fn utc_timestamps_are_formatted_as_calendar_dates() {
     assert_eq!(format_utc(0), "1970-01-01 00:00 UTC");
     assert_eq!(format_utc(951_782_400), "2000-02-29 00:00 UTC");
     assert_eq!(format_utc(1_700_000_000), "2023-11-14 22:13 UTC");
+}
+
+/// Downloads the real OptiScaler and ANR FG packages: `cargo test -- --ignored anr`.
+#[test]
+#[ignore = "downloads ~50 MB from GitHub"]
+fn anr_frame_generation_installs_its_optiscaler_and_provider_and_uninstalls_cleanly() {
+    use fsroneclick::game::{GameInfo, GraphicsApi, Store};
+    use fsroneclick::gpu::Arch;
+    use fsroneclick::installer::{install, uninstall, InstallConfig, ANR_FG_PROVIDER};
+
+    let dir = temp_dir("anr_live");
+    fs::write(dir.join("game.exe"), b"exe").unwrap();
+    let game = GameInfo {
+        title: "ANR Live Test".to_string(),
+        path: dir.clone(),
+        exe_path: Some(dir.join("game.exe")),
+        store: Store::Custom,
+        app_id: None,
+        api: GraphicsApi::DirectX12,
+        is_64bit: true,
+        has_native_dlss: false,
+        is_re_engine: false,
+        anticheat: None,
+        fidelityfx_tier: None,
+        compat: Default::default(),
+    };
+    let config = InstallConfig {
+        enable_anr_fg: true,
+        enable_reshade: false,
+        enable_renodx: false,
+        enable_cas_sharpening: false,
+        ..InstallConfig::default()
+    };
+    let skipped = std::sync::Mutex::new(Vec::new());
+    install(
+        &client(),
+        &game,
+        &config,
+        &Arch::Rdna3,
+        &Default::default(),
+        Box::new(|_, msg| {
+            if msg.starts_with(fsroneclick::installer::SKIPPED_PREFIX) {
+                skipped.lock().unwrap().push(msg.to_string());
+            }
+        }),
+    )
+    .unwrap();
+
+    assert!(
+        skipped.lock().unwrap().is_empty(),
+        "{:?}",
+        skipped.lock().unwrap()
+    );
+    let provider = dir
+        .join("OptiScaler")
+        .join("custom")
+        .join(ANR_FG_PROVIDER)
+        .join("dlssg");
+    assert!(provider.join("nvngx_dlssg.dll").is_file());
+    assert!(provider.join("nr_fg.ini").is_file());
+    let ini = fs::read_to_string(dir.join("OptiScaler.ini")).unwrap();
+    assert!(ini.contains("FGNvngxReplacement = Apex Neural Rendering FG"));
+    // ANR's OptiScaler build is much larger than the 0.9.4 release's OptiScaler.dll.
+    assert!(fs::metadata(dir.join("dxgi.dll")).unwrap().len() > 20_000_000);
+
+    uninstall(&game).unwrap();
+    assert!(!dir.join("dxgi.dll").exists());
+    assert!(!provider.join("nvngx_dlssg.dll").exists());
+    assert!(!dir.join("OptiScaler.ini").exists());
+    let _ = fs::remove_dir_all(&dir);
 }

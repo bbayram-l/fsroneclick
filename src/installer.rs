@@ -1,6 +1,8 @@
 //! 1-Click mod installation, configuration generation, and clean manifest-based rollback.
 
-use crate::game::{GameInfo, LEGACY_MANIFEST_NAME, MANIFEST_NAME, OPTI_PROXY, RESHADE_DLL};
+use crate::game::{
+    GameInfo, GraphicsApi, LEGACY_MANIFEST_NAME, MANIFEST_NAME, OPTI_PROXY, RESHADE_DLL,
+};
 use crate::gpu::{self, Arch};
 use crate::net::{self, ProgressCallback};
 use crate::renodx::{self, RenoDxMod};
@@ -25,6 +27,18 @@ pub const RESHADE_ADDON_SETUP_URL: &str =
 /// certificate as the previously pinned 6.4.1 (`CN=ReShade`, thumbprint 589690…C49F).
 pub const RESHADE_ADDON_SETUP_SHA256: &str =
     "afe4c8f13048306307983b8b3d41d5bf00a86820440b0e57dea10950e1176445";
+
+/// Apex Neural Rendering frame generation (github.com/apex-compute/ANR), an optional provider for
+/// DLSS frame generation. Its "full" package carries the OptiScaler build (GPL-3.0) that can load
+/// custom providers; no tagged OptiScaler release could as of 0.9.5.
+pub const ANR_FG_VERSION: &str = "V.B20";
+pub const ANR_FG_FULL_URL: &str =
+    "https://github.com/apex-compute/ANR/releases/download/FG-V.B20/anr-fg-V.B20-full.zip";
+/// Matches the release's SHA256SUMS.txt and the digest GitHub publishes for the asset.
+pub const ANR_FG_FULL_SHA256: &str =
+    "999e8b08ac177749880d75018bbe02f6d184730bbd3bb13b68633860bf491598";
+/// OptiScaler's name for the provider, which is also its folder under `OptiScaler/custom`.
+pub const ANR_FG_PROVIDER: &str = "Apex Neural Rendering FG";
 
 // Rolling downloads: always the latest release, verified against the SHA-256 GitHub publishes.
 pub const OPTIPATCHER_REPO: &str = "optiscaler/OptiPatcher";
@@ -143,6 +157,8 @@ pub struct InstallConfig {
     pub enable_renodx: bool,
     pub enable_cas_sharpening: bool,
     pub enable_lumenite_fx: bool,
+    /// Generate frames with Apex Neural Rendering (beta) instead of AMD FSR frame generation.
+    pub enable_anr_fg: bool,
 }
 
 impl Default for InstallConfig {
@@ -155,8 +171,18 @@ impl Default for InstallConfig {
             enable_renodx: true,
             enable_cas_sharpening: true,
             enable_lumenite_fx: false,
+            enable_anr_fg: false,
         }
     }
+}
+
+/// Whether an install of `config` into `game` uses Apex Neural Rendering frame generation. ANR's
+/// OptiScaler build and provider are DirectX 12 only.
+pub fn anr_fg_applies(config: &InstallConfig, game: &GameInfo) -> bool {
+    config.enable_optiscaler
+        && config.enable_frame_generation
+        && config.enable_anr_fg
+        && game.api == GraphicsApi::DirectX12
 }
 
 /// Performs a 1-click installation of the full enhancement suite to a game.
@@ -269,10 +295,35 @@ fn deploy_components(
             net::extract_7z,
         )?;
 
+        // A failed ANR download falls back to AMD FSR frame generation instead of failing the install.
+        let anr_dir = if anr_fg_applies(config, game) {
+            progress(
+                0.42,
+                &format!("Acquiring Apex Neural Rendering FG {ANR_FG_VERSION} (beta)"),
+            );
+            fetch_anr_fg(client, &cache)
+                .map_err(|e| {
+                    progress(
+                        0.44,
+                        &format!(
+                            "{SKIPPED_PREFIX}Apex Neural Rendering FG, using AMD FSR frame \
+                             generation instead: {e:#}"
+                        ),
+                    )
+                })
+                .ok()
+        } else {
+            None
+        };
+
         progress(0.45, "Deploying OptiScaler & FakeNVAPI proxies");
-        // Deploy OptiScaler.dll as recommended hook (e.g. dxgi.dll or winmm.dll)
-        let src_opti_dll = find_file_in_dir(&temp_extract, "OptiScaler.dll")
-            .ok_or_else(|| anyhow!("OptiScaler.dll not found in extracted package"))?;
+        // Deploy OptiScaler.dll as recommended hook (e.g. dxgi.dll or winmm.dll). ANR needs the
+        // OptiScaler build from its own package, which can load custom frame generation providers.
+        let src_opti_dll = match &anr_dir {
+            Some(dir) => dir.join("dxgi.dll"),
+            None => find_file_in_dir(&temp_extract, "OptiScaler.dll")
+                .ok_or_else(|| anyhow!("OptiScaler.dll not found in extracted package"))?,
+        };
         let hook_dll_name = game.compat.recommended_hook.unwrap_or(OPTI_PROXY);
         deployment.copy_file(&src_opti_dll, hook_dll_name)?;
 
@@ -303,6 +354,19 @@ fn deploy_components(
             let _ = deployment.copy_file(&d3d12_src, "D3D12_Optiscaler/D3D12Core.dll");
         }
 
+        if let Some(dir) = &anr_dir {
+            progress(0.47, "Deploying Apex Neural Rendering FG provider");
+            let custom = dir.join("OptiScaler").join("custom");
+            for src in files_under(&custom) {
+                let rel = src.strip_prefix(&custom)?;
+                let parts: Vec<_> = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect();
+                deployment.copy_file(&src, &format!("OptiScaler/custom/{}", parts.join("/")))?;
+            }
+        }
+
         // Deploy OptiPatcher for UE DLSS/DLSSG titles if supported
         if game.compat.optipatcher_supported {
             progress(0.48, "Deploying OptiPatcher for UE DLSS & Frame Gen unlock");
@@ -325,7 +389,11 @@ fn deploy_components(
             0.5,
             "Generating AMD RDNA optimized OptiScaler configuration",
         );
-        let ini_content = generate_optiscaler_ini(config, gpu_arch, &game.compat);
+        let ini_config = InstallConfig {
+            enable_anr_fg: anr_dir.is_some(),
+            ..config.clone()
+        };
+        let ini_content = generate_optiscaler_ini(&ini_config, gpu_arch, &game.compat);
         deployment.write_file("OptiScaler.ini", ini_content)?;
     }
 
@@ -614,6 +682,13 @@ pub fn generate_optiscaler_ini(
     } else {
         "false"
     };
+    // ANR takes DLSS frame generation's place as a custom provider. It generates from the game's
+    // HUD-less color and draws the HUD over it, so HUD-less input must stay on.
+    let fg_routing = if config.enable_frame_generation && config.enable_anr_fg {
+        format!("FGInput = nvngxfg\nFGNvngxReplacement = {ANR_FG_PROVIDER}\nDisableHudless = false")
+    } else {
+        "FGInput = dlssg\nFGOutput = fsrfg".to_string()
+    };
 
     format!(
         r#"; FSRoneclick Configuration - Optimized for AMD Radeon & Universal GPUs
@@ -624,8 +699,7 @@ VulkanUpscaler = fsr31
 
 [FrameGen]
 Enabled = {fg_enabled}
-FGInput = dlssg
-FGOutput = fsrfg
+{fg_routing}
 PreserveSwapChain = true
 
 [FSR]
@@ -680,6 +754,7 @@ MotionVectorResourceBarrier = auto
         non_linear = non_linear,
         fsr2_pattern = fsr2_pattern,
         fg_enabled = config.enable_frame_generation,
+        fg_routing = fg_routing,
         load_asi = load_asi,
         load_reshade = config.enable_reshade,
         spoof = spoof,
@@ -742,6 +817,50 @@ fn backup_path(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(BACKUP_SUFFIX);
     PathBuf::from(name)
+}
+
+/// Downloads and unpacks ANR's full package, returning its `game` folder: OptiScaler's `dxgi.dll`
+/// and the provider under `OptiScaler/custom`.
+fn fetch_anr_fg(client: &Client, cache: &Path) -> Result<PathBuf> {
+    let archive = net::get_or_download_verified(
+        client,
+        ANR_FG_FULL_URL,
+        &format!("anr-fg-{ANR_FG_VERSION}-full.zip"),
+        ANR_FG_FULL_SHA256,
+        Box::new(|_, _| {}),
+    )?;
+    let extracted = net::extract_once(
+        cache,
+        &archive,
+        ANR_FG_FULL_SHA256,
+        "anr-fg",
+        net::extract_zip,
+    )?;
+    let game = extracted.join("game");
+    let provider = game.join("OptiScaler").join("custom").join(ANR_FG_PROVIDER);
+    if !game.join("dxgi.dll").is_file() || !provider.is_dir() {
+        return Err(anyhow!(
+            "the ANR FG {ANR_FG_VERSION} package does not have the expected layout"
+        ));
+    }
+    Ok(game)
+}
+
+/// Every file below `dir`, at any depth.
+fn files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in fs::read_dir(current).into_iter().flatten().flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.is_file() {
+                files.push(p);
+            }
+        }
+    }
+    files
 }
 
 fn find_file_in_dir(dir: &Path, target_name: &str) -> Option<PathBuf> {
