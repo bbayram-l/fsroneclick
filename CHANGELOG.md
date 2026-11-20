@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Updated eframe/egui to 0.37 (still on the OpenGL renderer), reqwest to 0.13 (still using Windows' native TLS),
+  sha2 to 0.11, zip to 9.1 and windows-sys to 0.61.
+- Building from source now needs Rust 1.95 or newer (required by eframe 0.37). The released exe is unaffected.
+
 ### Removed
 
 - Unused direct `egui` dependency; the app uses egui through `eframe`.

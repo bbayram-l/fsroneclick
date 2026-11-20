@@ -6,7 +6,7 @@ use crate::installer::{self, InstallConfig};
 use crate::net;
 use crate::renodx::{self, RenoDxMod};
 use crate::updater::ComponentState;
-use eframe::egui::{self, Color32, RichText, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use reqwest::blocking::Client;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -360,7 +360,8 @@ impl FSRoneclickApp {
 }
 
 impl eframe::App for FSRoneclickApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
         self.poll_task();
 
         // Dark modern gaming style
@@ -374,7 +375,7 @@ impl eframe::App for FSRoneclickApp {
         visuals.widgets.active.bg_fill = Color32::from_rgb(60, 72, 100);
         ctx.set_visuals(visuals);
 
-        egui::TopBottomPanel::top("header_panel").show(ctx, |ui| {
+        egui::Panel::top("header_panel").show(ui, |ui| {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.heading(
@@ -435,7 +436,7 @@ impl eframe::App for FSRoneclickApp {
         });
 
         // Bottom status & progress bar
-        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+        egui::Panel::bottom("status_bar").show(ui, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 if self.task_running {
@@ -456,10 +457,10 @@ impl eframe::App for FSRoneclickApp {
         });
 
         // Left sidebar: Games List & Search
-        egui::SidePanel::left("games_sidebar")
-            .min_width(320.0)
-            .max_width(360.0)
-            .show(ctx, |ui| {
+        egui::Panel::left("games_sidebar")
+            .min_size(320.0)
+            .max_size(360.0)
+            .show(ui, |ui| {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     let search_resp = ui.add(
@@ -585,7 +586,7 @@ impl eframe::App for FSRoneclickApp {
             });
 
         // Main Center Panel: Selected Game Detail & Setup Actions
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             let Some(idx) = self.selected_game_idx else {
                 ui.centered_and_justified(|ui| {
                     ui.heading(if self.is_scanning {
@@ -805,7 +806,7 @@ impl eframe::App for FSRoneclickApp {
                     )
                     .fill(Color32::from_rgb(16, 120, 70))
                     .min_size(Vec2::new(240.0, 40.0))
-                    .rounding(Rounding::same(4.0));
+                    .corner_radius(CornerRadius::same(4));
 
                     if ui.add_enabled(!self.task_running, install_btn).clicked() {
                         self.run_install(idx);
@@ -817,7 +818,7 @@ impl eframe::App for FSRoneclickApp {
                             .strong(),
                     )
                     .min_size(Vec2::new(180.0, 38.0))
-                    .rounding(Rounding::same(4.0));
+                    .corner_radius(CornerRadius::same(4));
 
                     if ui.add_enabled(!self.task_running, update_btn).clicked() {
                         self.run_install(idx);
@@ -834,7 +835,7 @@ impl eframe::App for FSRoneclickApp {
                     .fill(Color32::from_rgb(60, 24, 28))
                     .stroke(Stroke::new(1.0_f32, Color32::from_rgb(140, 40, 50)))
                     .min_size(Vec2::new(180.0, 38.0))
-                    .rounding(Rounding::same(4.0));
+                    .corner_radius(CornerRadius::same(4));
 
                     if ui.add_enabled(!self.task_running, uninstall_btn).clicked() {
                         self.run_uninstall(idx);
@@ -851,7 +852,7 @@ impl eframe::App for FSRoneclickApp {
                     ui.horizontal(|ui| {
                         if ui.button("Copy Output").clicked() {
                             let all_logs = self.log_messages.join("\n");
-                            ui.output_mut(|o| o.copied_text = all_logs);
+                            ui.ctx().copy_text(all_logs);
                         }
                         if ui.button("Clear").clicked() {
                             self.log_messages.clear();
@@ -859,11 +860,11 @@ impl eframe::App for FSRoneclickApp {
                     });
                     ui.add_space(4.0);
 
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(Color32::from_rgb(14, 16, 22))
                         .stroke(Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 64)))
-                        .rounding(Rounding::same(4.0))
-                        .inner_margin(egui::Margin::same(8.0))
+                        .corner_radius(CornerRadius::same(4))
+                        .inner_margin(egui::Margin::same(8))
                         .show(ui, |ui| {
                             egui::ScrollArea::vertical()
                                 .id_salt("action_log_inner_scroll")
