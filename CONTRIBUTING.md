@@ -11,7 +11,7 @@ Thanks for helping! Bug reports, game compatibility reports, documentation fixes
 
 ## Development setup
 
-Requirements: Windows 10/11 x64 and [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer.
+Requirements: Windows 10/11 x64 and [Rust](https://www.rust-lang.org/tools/install) 1.95 or newer.
 
 ```powershell
 git clone https://github.com/bbayram-l/fsroneclick.git

@@ -103,11 +103,19 @@ fn stream_to_file(
 /// SHA-256 of a file as lowercase hex.
 pub fn sha256_file(path: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
+    use std::io::Read;
 
     let mut file =
         File::open(path).with_context(|| format!("Failed to open {}", path.display()))?;
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
     Ok(hex(&hasher.finalize()))
 }
 

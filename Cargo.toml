@@ -2,7 +2,7 @@
 name = "fsroneclick"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.95"
 authors = ["FSRoneclick Contributors"]
 description = "One-click deployment of AMD FSR (3.1 / 4.1.1 Redstone + Frame Generation), OptiScaler, ReShade, RenoDX HDR, and Anti-Lag 2 for AMD Radeon & Universal GPUs"
 license = "MIT"
@@ -12,11 +12,11 @@ keywords = ["fsr", "fsr4", "amd", "frame-generation", "optiscaler"]
 categories = ["command-line-utilities", "game-development", "gui"]
 
 [dependencies]
-eframe = "0.29"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "default-tls", "json"] }
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.10"
+sha2 = "0.11"
 zip = { version = "9.1", default-features = false, features = ["deflate"] }
 sevenz-rust = "0.6"
 windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }

@@ -195,7 +195,7 @@ fsroneclick.exe --update-compat
 > **Note**: Building from source is only required if you are contributing to the codebase. Regular users should download the ready-to-run release executable.
 
 ### Prerequisites
-- [Rust](https://www.rust-lang.org/tools/install) 1.88 or later
+- [Rust](https://www.rust-lang.org/tools/install) 1.95 or later
 - Windows 10 / 11 64-bit
 
 ### Build Steps
