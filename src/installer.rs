@@ -185,6 +185,87 @@ pub fn anr_fg_applies(config: &InstallConfig, game: &GameInfo) -> bool {
         && game.api == GraphicsApi::DirectX12
 }
 
+/// Which frame generator OptiScaler runs. They exclude each other, so the GUI offers one choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameGeneration {
+    Off,
+    AmdFsr,
+    ApexNeural,
+}
+
+impl InstallConfig {
+    pub fn frame_generation(&self) -> FrameGeneration {
+        match (self.enable_frame_generation, self.enable_anr_fg) {
+            (false, _) => FrameGeneration::Off,
+            (true, false) => FrameGeneration::AmdFsr,
+            (true, true) => FrameGeneration::ApexNeural,
+        }
+    }
+
+    pub fn set_frame_generation(&mut self, choice: FrameGeneration) {
+        self.enable_frame_generation = choice != FrameGeneration::Off;
+        self.enable_anr_fg = choice == FrameGeneration::ApexNeural;
+    }
+
+    /// The components an install of this config places, by name, so the player sees exactly what
+    /// the button will do. A game's RenoDX mod is not listed: whether one exists depends on the
+    /// catalog.
+    pub fn summary(&self, gpu_arch: &Arch, api: GraphicsApi) -> Vec<String> {
+        let mut items = Vec::new();
+        if self.enable_optiscaler {
+            let anr = self.frame_generation() == FrameGeneration::ApexNeural
+                && api == GraphicsApi::DirectX12;
+            items.push(
+                if anr {
+                    "OptiScaler (Apex build)"
+                } else {
+                    "OptiScaler"
+                }
+                .to_string(),
+            );
+            match self.frame_generation() {
+                FrameGeneration::Off => {}
+                _ if anr => items.push(ANR_FG_PROVIDER.to_string()),
+                _ => items.push("AMD FSR 3.1 FG".to_string()),
+            }
+            if self.enable_fsr4 && gpu_arch.supports_fsr4() {
+                let model = if gpu_arch.supports_fsr4_int8() {
+                    "INT8"
+                } else {
+                    "FP8"
+                };
+                items.push(format!("FSR 4 ({model})"));
+            }
+        }
+        if self.enable_reshade {
+            items.push("ReShade".to_string());
+            if self.enable_cas_sharpening {
+                items.push("CAS sharpening".to_string());
+            }
+        }
+        items
+    }
+}
+
+/// Makes the game folder hold exactly what `config` selects: removes an earlier FSRoneclick install
+/// first, so components that are no longer ticked do not stay behind.
+pub fn reinstall(
+    client: &Client,
+    game: &GameInfo,
+    config: &InstallConfig,
+    gpu_arch: &Arch,
+    renodx_catalog: &HashMap<String, RenoDxMod>,
+    mut progress: ProgressCallback,
+) -> Result<Vec<String>> {
+    if let Some(exe) = &game.exe_path {
+        if find_manifest(exe.parent().unwrap_or(&game.path)).is_some() {
+            progress(0.02, "Removing the previous installation");
+            uninstall(game)?;
+        }
+    }
+    install(client, game, config, gpu_arch, renodx_catalog, progress)
+}
+
 /// Performs a 1-click installation of the full enhancement suite to a game.
 pub fn install(
     client: &Client,
@@ -430,7 +511,8 @@ fn deploy_components(
     }
 
     // 4. RenoDX HDR Mod Matching & Deployment
-    if config.enable_renodx {
+    // RenoDX and CAS run inside ReShade, so they are only placed with it.
+    if config.enable_reshade && config.enable_renodx {
         if let Some(matched_mod) = renodx::match_game(&game.title, renodx_catalog) {
             progress(
                 0.75,
@@ -456,7 +538,7 @@ fn deploy_components(
     }
 
     // 5. AMD FidelityFX CAS & ReShade Headers
-    if config.enable_cas_sharpening {
+    if config.enable_reshade && config.enable_cas_sharpening {
         progress(0.85, "Installing AMD FidelityFX CAS & shader headers");
         let cas_entry = "reshade-shaders/Shaders/CAS.fx";
         let downloaded =
@@ -644,6 +726,19 @@ pub fn uninstall(game: &GameInfo) -> Result<Vec<String>> {
             .to_string_lossy()
             .to_string(),
     );
+
+    // Logs OptiScaler and ANR wrote while the game ran are not in the manifest, but only exist
+    // because of this install. A leftover OptiScaler.log would also make the game read as modded.
+    if manifest_entries(&content).any(|e| e.eq_ignore_ascii_case("OptiScaler.ini")) {
+        let _ = fs::remove_file(target_dir.join("OptiScaler.log"));
+    }
+    let custom = target_dir.join("OptiScaler").join("custom");
+    let anr_prefix = format!("OptiScaler/custom/{ANR_FG_PROVIDER}/");
+    if manifest_entries(&content).any(|e| e.replace('\\', "/").starts_with(&anr_prefix)) {
+        let _ = fs::remove_dir_all(custom.join(ANR_FG_PROVIDER));
+    }
+    let _ = fs::remove_dir(&custom);
+    let _ = fs::remove_dir(target_dir.join("OptiScaler"));
 
     // Clean up empty directories if present
     let _ = fs::remove_dir(target_dir.join("plugins"));
