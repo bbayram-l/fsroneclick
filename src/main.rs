@@ -393,7 +393,7 @@ fn run_install_cli(path_str: &str, anr_fg: bool) {
         outln!("[{:>3.0}%] {}", pct * 100.0, msg);
     });
 
-    match installer::install(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
+    match installer::reinstall(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
         Ok(files) => {
             outln!(
                 "\nSUCCESS: Staged {} components in {}:",

@@ -2,7 +2,7 @@
 
 use crate::game::{self, GameInfo, ModStatus, Store};
 use crate::gpu::{self, GpuInfo};
-use crate::installer::{self, InstallConfig};
+use crate::installer::{self, FrameGeneration, InstallConfig};
 use crate::net;
 use crate::renodx::{self, RenoDxMod};
 use crate::updater::ComponentState;
@@ -204,7 +204,7 @@ impl FSRoneclickApp {
             });
 
             let catalog = catalog.unwrap_or_else(|| renodx::fetch_mods_catalog(&client));
-            match installer::install(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
+            match installer::reinstall(&client, &game, &config, &gpu_arch, &catalog, progress_fn) {
                 Ok(files) => {
                     let _ = tx.send(TaskMessage::Log(format!(
                         "Installed {} files successfully:\n{}",
@@ -737,17 +737,28 @@ impl eframe::App for FSRoneclickApp {
                 ui.checkbox(&mut self.config.enable_optiscaler, "OptiScaler (FSR 3.1 & Intel XeSS 1.3)");
                 ui.label(RichText::new("   Replaces in-game DLSS 2/3 calls with AMD FSR 3.1 upscaling.").size(11.0).color(Color32::GRAY));
 
-                ui.checkbox(&mut self.config.enable_frame_generation, "AMD FSR 3.1 Frame Generation");
-                ui.label(RichText::new("   Enables Nukem9's DLSS-G to FSR 3 Frame Generation bridge.").size(11.0).color(Color32::GRAY));
-
-                ui.add_enabled(
-                    self.config.enable_frame_generation,
-                    egui::Checkbox::new(&mut self.config.enable_anr_fg, "Apex Neural Rendering Frame Generation (beta)"),
-                );
-                ui.label(RichText::new(format!(
-                    "   Neural frame generation by Apex Compute ({}), up to 6x, DirectX 12 games only. Downloaded from\n   its GitHub release with its own OptiScaler build. Other games keep FSR 3.1 Frame Generation.",
-                    installer::ANR_FG_VERSION
-                )).size(11.0).color(Color32::GRAY));
+                // One choice: the frame generators exclude each other.
+                ui.add_enabled_ui(self.config.enable_optiscaler, |ui| {
+                    ui.label("Frame Generation (pick one):");
+                    let mut fg = self.config.frame_generation();
+                    ui.radio_value(&mut fg, FrameGeneration::Off, "Off");
+                    ui.radio_value(&mut fg, FrameGeneration::AmdFsr, "AMD FSR 3.1 Frame Generation");
+                    ui.label(RichText::new("   Turns the game's DLSS Frame Generation into AMD FSR 3.1 Frame Generation.").size(11.0).color(Color32::GRAY));
+                    let anr_ok = game.api == crate::game::GraphicsApi::DirectX12;
+                    ui.add_enabled_ui(anr_ok, |ui| {
+                        ui.radio_value(&mut fg, FrameGeneration::ApexNeural, "Apex Neural Rendering Frame Generation (beta)");
+                    });
+                    let anr_note = if anr_ok {
+                        format!("   Neural frame generation by Apex Compute ({}), up to 6x. Replaces OptiScaler with the\n   build from ANR's GitHub release.", installer::ANR_FG_VERSION)
+                    } else {
+                        "   DirectX 12 games only.".to_string()
+                    };
+                    ui.label(RichText::new(anr_note).size(11.0).color(Color32::GRAY));
+                    if !anr_ok && fg == FrameGeneration::ApexNeural {
+                        fg = FrameGeneration::AmdFsr;
+                    }
+                    self.config.set_frame_generation(fg);
+                });
 
                 let arch = self.gpu.as_ref().map(|g| &g.arch);
                 ui.horizontal(|ui| {
@@ -764,11 +775,25 @@ impl eframe::App for FSRoneclickApp {
                 ui.checkbox(&mut self.config.enable_reshade, "ReShade (Add-on support build)");
                 ui.label(RichText::new("   Chained cleanly alongside OptiScaler as ReShade64.dll.").size(11.0).color(Color32::GRAY));
 
-                if renodx_mod.is_some() {
-                    ui.checkbox(&mut self.config.enable_renodx, "RenoDX Game-Specific HDR Mod");
-                    ui.label(RichText::new("   Injects studio-grade HDR10/scRGB color grading into the game.").size(11.0).color(Color32::GRAY));
-                }
+                ui.add_enabled_ui(self.config.enable_reshade, |ui| {
+                    ui.checkbox(&mut self.config.enable_cas_sharpening, "AMD CAS Sharpening (ReShade shader)");
+                    if renodx_mod.is_some() {
+                        ui.checkbox(&mut self.config.enable_renodx, "RenoDX Game-Specific HDR Mod");
+                        ui.label(RichText::new("   Injects studio-grade HDR10/scRGB color grading into the game.").size(11.0).color(Color32::GRAY));
+                    }
+                });
 
+                ui.add_space(6.0);
+                let arch = self.gpu.as_ref().map(|g| g.arch.clone()).unwrap_or(gpu::Arch::Unknown);
+                let mut items = self.config.summary(&arch, game.api);
+                if self.config.enable_reshade && self.config.enable_renodx && renodx_mod.is_some() {
+                    items.push("RenoDX HDR".to_string());
+                }
+                let summary = if items.is_empty() { "nothing".to_string() } else { items.join(" + ") };
+                ui.label(RichText::new(format!("Will install exactly: {summary}")).strong().color(Color32::from_rgb(120, 200, 255)));
+                if mod_status.is_optiscaler_installed {
+                    ui.label(RichText::new("Update Configuration removes the current install first, so unticked items are removed.").size(11.0).color(Color32::GRAY));
+                }
             });
 
             ui.add_space(10.0);

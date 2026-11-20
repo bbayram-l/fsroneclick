@@ -5,6 +5,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Update Configuration** now removes the current install before applying the ticked options, so unticked components
+  (for example ReShade, or Apex frame generation after switching back to FSR) no longer stay in the game folder.
+- CAS sharpening and RenoDX are no longer installed when ReShade is off; CAS now has its own checkbox.
+- Uninstall also removes `OptiScaler.log` and ANR's logs, which the game writes at runtime; a leftover
+  `OptiScaler.log` made the game still show as installed.
+
+### Changed
+
+- Frame generation is a single choice (Off / AMD FSR 3.1 / Apex Neural Rendering) instead of two checkboxes, and the
+  options panel lists exactly what **Install** will place.
+
 ### Added
 
 - Optional **Apex Neural Rendering frame generation** (beta, ANR FG V.B20) for DirectX 12 games, in the GUI and with

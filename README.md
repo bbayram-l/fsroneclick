@@ -69,7 +69,9 @@ FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows exe
      game's `.exe` (for example `D:\Games\Far Cry 5\bin`).
 2. Select the game and review the **Engine & System Analysis**: graphics API, anti-cheat, the community compatibility
    status, and any recommended workarounds, which FSRoneclick applies automatically.
-3. Choose the **Enhancement Options** and click **Install Enhancements**.
+3. Choose the **Enhancement Options** and click **Install Enhancements**. Only ticked items are installed, and the
+   line **Will install exactly** under the options lists them. Frame generation is one choice: **Off**, **AMD FSR 3.1**,
+   or **Apex Neural Rendering** (DirectX 12 only). CAS sharpening and RenoDX need ReShade.
 4. Launch the game the way you normally do (Steam, Epic, or the game's executable).
 5. In the game's **Video / Display** settings:
    - Set the upscaler to **DLSS** (or XeSS / FSR if DLSS isn't offered). OptiScaler runs AMD FSR 3.1 or FSR 4 in its place.
@@ -104,8 +106,8 @@ and ANR takes its place.
 
 ### Change Settings or Uninstall
 
-Once a game has enhancements installed, its page shows **Update Configuration**, which re-applies your current
-options, and **Uninstall Enhancements**, which removes every file FSRoneclick placed and restores any game file it had
+Once a game has enhancements installed, its page shows **Update Configuration**, which removes the current
+install and then installs exactly the options now ticked (anything unticked is removed), and **Uninstall Enhancements**, which removes every file FSRoneclick placed and restores any game file it had
 replaced. Close the game before uninstalling.
 
 ---

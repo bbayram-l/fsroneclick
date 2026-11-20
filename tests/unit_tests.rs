@@ -689,3 +689,51 @@ fn anr_frame_generation_only_applies_to_directx12_games() {
     game.api = GraphicsApi::Vulkan;
     assert!(!anr_fg_applies(&config, &game));
 }
+
+#[test]
+fn frame_generation_is_one_choice() {
+    use fsroneclick::installer::FrameGeneration;
+    let mut config = InstallConfig::default();
+    assert_eq!(config.frame_generation(), FrameGeneration::AmdFsr);
+
+    config.set_frame_generation(FrameGeneration::ApexNeural);
+    assert!(config.enable_frame_generation && config.enable_anr_fg);
+    assert_eq!(config.frame_generation(), FrameGeneration::ApexNeural);
+
+    config.set_frame_generation(FrameGeneration::Off);
+    assert!(!config.enable_frame_generation && !config.enable_anr_fg);
+    assert_eq!(config.frame_generation(), FrameGeneration::Off);
+
+    config.set_frame_generation(FrameGeneration::AmdFsr);
+    assert!(config.enable_frame_generation && !config.enable_anr_fg);
+}
+
+#[test]
+fn install_summary_names_exactly_what_will_be_installed() {
+    use fsroneclick::installer::FrameGeneration;
+    let mut config = InstallConfig {
+        enable_reshade: false,
+        ..InstallConfig::default()
+    };
+    config.set_frame_generation(FrameGeneration::ApexNeural);
+
+    let summary = config.summary(&Arch::Rdna3, GraphicsApi::DirectX12);
+
+    assert!(
+        summary.contains(&"OptiScaler (Apex build)".to_string()),
+        "{summary:?}"
+    );
+    assert!(
+        summary.contains(&"Apex Neural Rendering FG".to_string()),
+        "{summary:?}"
+    );
+    assert!(summary.contains(&"FSR 4 (INT8)".to_string()), "{summary:?}");
+    assert!(!summary
+        .iter()
+        .any(|s| s.contains("ReShade") || s.contains("AMD FSR 3.1 FG")));
+
+    // ANR is DirectX 12 only: other games get AMD FSR frame generation and the release OptiScaler.
+    let dx11 = config.summary(&Arch::Rdna3, GraphicsApi::DirectX11);
+    assert!(dx11.contains(&"OptiScaler".to_string()), "{dx11:?}");
+    assert!(dx11.contains(&"AMD FSR 3.1 FG".to_string()), "{dx11:?}");
+}
