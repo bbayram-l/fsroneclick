@@ -805,7 +805,8 @@ impl eframe::App for FSRoneclickApp {
             if let Some(other) = mod_status.conflicting_mod {
                 ui.label(
                     RichText::new(format!(
-                        "{other} is installed in this game. It also replaces the game's upscaler, so                          FSRoneclick cannot install here. Remove {other} with its own installer first."
+                        "{other} is installed in this game. It also replaces the game's upscaler, so \
+                         FSRoneclick cannot install here. Remove {other} with its own installer first."
                     ))
                     .color(Color32::from_rgb(255, 90, 90)),
                 );

@@ -183,7 +183,8 @@ pub fn install(
     let target_dir = exe_path.parent().unwrap_or(&game.path);
     if let Some(other) = crate::game::detect_conflicting_mod(target_dir) {
         return Err(anyhow!(
-            "Cannot install: {other} is installed in {}. Both mods replace the game's upscaler and              cannot run together. Remove {other} with its own installer first, then install again.",
+            "Cannot install: {other} is installed in {}. Both mods replace the game's upscaler and \
+             cannot run together. Remove {other} with its own installer first, then install again.",
             target_dir.display()
         ));
     }
