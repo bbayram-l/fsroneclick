@@ -50,6 +50,9 @@ FSRoneclick is distributed as a **fully self-contained, pre-compiled Windows exe
 - **Single-player / offline only for protected games.** FSRoneclick installs DLL proxies (e.g. `dxgi.dll`) into game
   folders. Kernel anti-cheat systems (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet) can block these or flag your
   account. FSRoneclick shows a warning when it detects anti-cheat, but **you are responsible for where you use it**.
+- **One upscaler mod per game.** If [AMDLSS5](https://github.com/Wehaveall/AMDLSS5) is installed in a game, FSRoneclick
+  marks the game and refuses to install there: both mods replace the game's upscaler. Remove AMDLSS5 with its own
+  installer first.
 - **64-bit games only.** OptiScaler and ReShade64 do not work in 32-bit games, so installs into them are refused.
 - **Use at your own risk.** Mods can cause crashes or visual glitches. Uninstall restores the game folder (see
   [What FSRoneclick Changes](#what-fsroneclick-changes-on-your-pc)), and Steam/Epic "Verify files" is always a fallback.

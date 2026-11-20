@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Games with [AMDLSS5](https://github.com/Wehaveall/AMDLSS5) installed are marked in the game list and CLI, and
+  FSRoneclick refuses to install into them instead of overwriting AMDLSS5's `version.dll` proxy.
+
 ### Changed
 
 - Updated eframe/egui to 0.37 (still on the OpenGL renderer), reqwest to 0.13 (still using Windows' native TLS),
