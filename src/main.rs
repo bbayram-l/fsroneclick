@@ -201,7 +201,9 @@ fn run_list_games() {
 
     for g in games {
         let status = g.check_mod_status();
-        let status_str = if status.is_optiscaler_installed {
+        let status_str = if let Some(other) = status.conflicting_mod {
+            other
+        } else if status.is_optiscaler_installed {
             "Modded"
         } else {
             "Stock"

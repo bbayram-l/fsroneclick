@@ -213,3 +213,42 @@ fn unreadable_manifest_is_reported_instead_of_overwritten() {
     assert!(Deployment::begin(&dir).is_err());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn reports_amdlss5_installed_in_the_game_folder() {
+    let dir = temp_game_dir("amdlss5_status");
+    assert_eq!(game_in(&dir).check_mod_status().conflicting_mod, None);
+
+    fs::write(dir.join("dlssnr_on_amd.ini"), b"[AMDLSS5]").unwrap();
+
+    assert_eq!(
+        game_in(&dir).check_mod_status().conflicting_mod,
+        Some("AMDLSS5")
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn install_refuses_a_game_that_has_amdlss5_and_leaves_its_files_alone() {
+    use fsroneclick::gpu::Arch;
+    use fsroneclick::installer::{install, InstallConfig};
+
+    let dir = temp_game_dir("amdlss5_install");
+    fs::write(dir.join("version.dll"), b"amdlss5 proxy").unwrap();
+    fs::write(dir.join("nr_native_adapter.dll"), b"amdlss5 helper").unwrap();
+
+    let err = install(
+        &reqwest::blocking::Client::new(),
+        &game_in(&dir),
+        &InstallConfig::default(),
+        &Arch::Rdna4,
+        &Default::default(),
+        Box::new(|_, _| {}),
+    )
+    .unwrap_err();
+
+    assert!(err.to_string().contains("AMDLSS5"), "{err}");
+    assert_eq!(fs::read(dir.join("version.dll")).unwrap(), b"amdlss5 proxy");
+    assert!(!dir.join(MANIFEST_NAME).exists());
+    let _ = fs::remove_dir_all(&dir);
+}

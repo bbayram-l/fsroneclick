@@ -77,6 +77,8 @@ pub struct ModStatus {
     pub is_reshade_installed: bool,
     pub installed_renodx_mod: Option<String>,
     pub manifest_files: Vec<String>,
+    /// Another upscaler-replacing mod found in the game folder; installing alongside it breaks both.
+    pub conflicting_mod: Option<&'static str>,
 }
 
 impl GameInfo {
@@ -85,7 +87,10 @@ impl GameInfo {
             return ModStatus::default();
         };
         let dir = exe.parent().unwrap_or(&self.path);
-        let mut status = ModStatus::default();
+        let mut status = ModStatus {
+            conflicting_mod: detect_conflicting_mod(dir),
+            ..ModStatus::default()
+        };
 
         // 1. Check manifest first (fastest and most accurate for FSRoneclick installations)
         let manifest_path = dir.join(MANIFEST_NAME);
@@ -859,6 +864,23 @@ pub fn inspect_binary(exe_path: &Path) -> (GraphicsApi, bool, bool) {
     };
 
     (api, is_64bit, has_dlss)
+}
+
+/// Files only AMDLSS5 (github.com/Wehaveall/AMDLSS5) places in a game folder. It hooks the
+/// game's upscaler through its own `version.dll` proxy, so OptiScaler cannot share the folder.
+const AMDLSS5_MARKERS: [&str; 4] = [
+    "dlssnr_on_amd.ini",
+    "nr_native_adapter.dll",
+    "nvngx_dlssnr.dll",
+    "amdlss5.dat",
+];
+
+/// Detects another mod in `dir` that also replaces the game's upscaler.
+pub fn detect_conflicting_mod(dir: &Path) -> Option<&'static str> {
+    AMDLSS5_MARKERS
+        .iter()
+        .any(|f| dir.join(f).is_file())
+        .then_some("AMDLSS5")
 }
 
 /// Detects if an anti-cheat engine is present.

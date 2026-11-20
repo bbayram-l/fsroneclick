@@ -572,6 +572,13 @@ impl eframe::App for FSRoneclickApp {
                                             .color(Color32::from_rgb(80, 220, 120)),
                                     );
                                 }
+                                if let Some(other) = mod_status.conflicting_mod {
+                                    ui.label(
+                                        RichText::new(format!("[{other}]"))
+                                            .size(10.0)
+                                            .color(Color32::from_rgb(255, 90, 90)),
+                                    );
+                                }
                                 if mod_status.installed_renodx_mod.is_some() {
                                     ui.label(
                                         RichText::new("[HDR]")
@@ -795,6 +802,16 @@ impl eframe::App for FSRoneclickApp {
 
             ui.add_space(6.0);
 
+            if let Some(other) = mod_status.conflicting_mod {
+                ui.label(
+                    RichText::new(format!(
+                        "{other} is installed in this game. It also replaces the game's upscaler, so                          FSRoneclick cannot install here. Remove {other} with its own installer first."
+                    ))
+                    .color(Color32::from_rgb(255, 90, 90)),
+                );
+                ui.add_space(6.0);
+            }
+
             // Action Buttons
             ui.horizontal(|ui| {
                 if !mod_status.is_optiscaler_installed {
@@ -808,7 +825,13 @@ impl eframe::App for FSRoneclickApp {
                     .min_size(Vec2::new(240.0, 40.0))
                     .corner_radius(CornerRadius::same(4));
 
-                    if ui.add_enabled(!self.task_running, install_btn).clicked() {
+                    if ui
+                        .add_enabled(
+                            !self.task_running && mod_status.conflicting_mod.is_none(),
+                            install_btn,
+                        )
+                        .clicked()
+                    {
                         self.run_install(idx);
                     }
                 } else {
