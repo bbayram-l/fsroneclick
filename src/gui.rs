@@ -740,6 +740,15 @@ impl eframe::App for FSRoneclickApp {
                 ui.checkbox(&mut self.config.enable_frame_generation, "AMD FSR 3.1 Frame Generation");
                 ui.label(RichText::new("   Enables Nukem9's DLSS-G to FSR 3 Frame Generation bridge.").size(11.0).color(Color32::GRAY));
 
+                ui.add_enabled(
+                    self.config.enable_frame_generation,
+                    egui::Checkbox::new(&mut self.config.enable_anr_fg, "Apex Neural Rendering Frame Generation (beta)"),
+                );
+                ui.label(RichText::new(format!(
+                    "   Neural frame generation by Apex Compute ({}), up to 6x, DirectX 12 games only. Downloaded from\n   its GitHub release with its own OptiScaler build. Other games keep FSR 3.1 Frame Generation.",
+                    installer::ANR_FG_VERSION
+                )).size(11.0).color(Color32::GRAY));
+
                 let arch = self.gpu.as_ref().map(|g| &g.arch);
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.config.enable_fsr4, "FSR 4.1.1 ML Upscaling");
@@ -1047,6 +1056,8 @@ impl FSRoneclickApp {
                             ui.group(|ui| {
                                 ui.label(RichText::new("Core Runtimes & Components").strong().color(Color32::from_rgb(255, 180, 80)));
                                 ui.label("• OptiScaler Team & cdozdil — OptiScaler (GPL-3.0 / MIT)\n  DLSS/XeSS to AMD FSR 3.1 & FSR 4 translation layer and frame generation runtime.");
+                                ui.add_space(4.0);
+                                ui.label("• Apex Compute — Apex Neural Rendering FG (beta, optional)\n  Neural frame generation provider for OptiScaler, with the OptiScaler build it ships.");
                                 ui.add_space(4.0);
                                 ui.label("• AMD (GPUOpen) — FidelityFX SDK & FSR Redstone (MIT)\n  Temporal upscaling, frame generation, and RDNA 3 WMMA INT8 tensor acceleration.");
                                 ui.add_space(4.0);

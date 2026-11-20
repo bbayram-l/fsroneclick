@@ -3,7 +3,7 @@
 FSRoneclick is an MIT-licensed automation utility. It coordinates the work of many other projects, and the credit
 for the underlying technologies belongs entirely to their authors.
 
-FSRoneclick **does not redistribute** OptiScaler, ReShade, RenoDX, REFramework, or OptiPatcher. They are downloaded
+FSRoneclick **does not redistribute** OptiScaler, ReShade, RenoDX, REFramework, OptiPatcher, or Apex Neural Rendering. They are downloaded
 from their official sources when you choose to install them, and each remains under its own license.
 
 ---
@@ -27,6 +27,13 @@ from their official sources when you choose to install them, and each remains un
   runtimes, each under its own license as documented in that package.
 - **License**: GNU General Public License v3.0
 - **Source**: release `v0.9.4` from the GitHub releases page
+
+### [Apex Neural Rendering FG](https://github.com/apex-compute/ANR) (optional)
+- **Authors**: Apex Compute
+- **Role**: Neural frame generation, loaded by OptiScaler as a custom frame generation provider. Its package includes a
+  build of OptiScaler (GPL-3.0, source published with each release) that can load such providers.
+- **License**: none published in the repository yet; all rights remain with Apex Compute
+- **Source**: release `FG-V.B20` (`anr-fg-V.B20-full.zip`) from the GitHub releases page, only when the option is chosen
 
 ### [OptiPatcher](https://github.com/optiscaler/OptiPatcher)
 - **Authors**: OptiScaler team and contributors

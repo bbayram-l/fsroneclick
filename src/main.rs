@@ -63,9 +63,9 @@ fn main() -> Result<()> {
     }
 
     if args.iter().any(|a| a == "--install") {
-        let path = args.iter().skip(1).find(|a| *a != "--install");
+        let path = args.iter().skip(1).find(|a| !a.starts_with("--"));
         if let Some(p) = path {
-            run_install_cli(p);
+            run_install_cli(p, args.iter().any(|a| a == "--anr-fg"));
             return Ok(());
         } else {
             errln!("Error: Missing game directory path.\nUsage: fsroneclick --install <game_path>");
@@ -114,6 +114,7 @@ OPTIONS:
     --list-games            Scan and list installed games across Steam, Epic, etc.
     --check <path>          Inspect a game directory or executable (API, DLSS, RenoDX)
     --install <path>        Headless 1-click install (OptiScaler + ReShade + RenoDX)
+    --anr-fg                With --install: Apex Neural Rendering frame generation (beta, DirectX 12)
     --remove <path>         Headless 1-click clean uninstall / rollback
     --check-updates         Check online versions of OptiScaler, ReShade, and databases
     --update-compat         Fetch and cache latest compatibility list from GitHub wiki
@@ -348,7 +349,7 @@ fn run_check(path_str: &str) {
     }
 }
 
-fn run_install_cli(path_str: &str) {
+fn run_install_cli(path_str: &str, anr_fg: bool) {
     let p = PathBuf::from(path_str);
     let Some(game) = game::from_custom_path(&p) else {
         errln!(
@@ -372,7 +373,15 @@ fn run_install_cli(path_str: &str) {
         .map(|g| g.arch.clone())
         .unwrap_or(gpu::Arch::Unknown);
     let catalog = renodx::fetch_mods_catalog(&client);
-    let config = installer::InstallConfig::default();
+    let config = installer::InstallConfig {
+        enable_anr_fg: anr_fg,
+        ..installer::InstallConfig::default()
+    };
+    if anr_fg && !installer::anr_fg_applies(&config, &game) {
+        errln!(
+            "Note: Apex Neural Rendering frame generation needs a DirectX 12 game; using AMD FSR frame generation."
+        );
+    }
 
     if let Some(anticheat) = game.anticheat {
         errln!(

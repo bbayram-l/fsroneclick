@@ -620,3 +620,72 @@ fn test_interrupted_download_leaves_no_partial_file() {
     assert!(!dir.join("OptiScaler.7z.part").exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn frame_generation_uses_fsr_fg_by_default() {
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+    let ini = generate_optiscaler_ini(&InstallConfig::default(), &Arch::Rdna3, &compat);
+
+    assert!(ini.contains("FGInput = dlssg"));
+    assert!(ini.contains("FGOutput = fsrfg"));
+    assert!(!ini.contains("FGNvngxReplacement"));
+}
+
+#[test]
+fn anr_frame_generation_routes_dlss_fg_to_the_apex_provider() {
+    let config = InstallConfig {
+        enable_anr_fg: true,
+        ..InstallConfig::default()
+    };
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+    let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
+
+    assert!(ini.contains("FGInput = nvngxfg"));
+    assert!(ini.contains("FGNvngxReplacement = Apex Neural Rendering FG"));
+    assert!(ini.contains("DisableHudless = false"));
+    assert!(!ini.contains("FGOutput = fsrfg"));
+}
+
+#[test]
+fn anr_frame_generation_is_ignored_when_frame_generation_is_off() {
+    let config = InstallConfig {
+        enable_frame_generation: false,
+        enable_anr_fg: true,
+        ..InstallConfig::default()
+    };
+    let compat = fsroneclick::compatibility::CompatibilityProfile::default();
+    let ini = generate_optiscaler_ini(&config, &Arch::Rdna3, &compat);
+
+    assert!(ini.contains("Enabled = false"));
+    assert!(!ini.contains("FGNvngxReplacement"));
+}
+
+#[test]
+fn anr_frame_generation_only_applies_to_directx12_games() {
+    use fsroneclick::installer::anr_fg_applies;
+    let config = InstallConfig {
+        enable_anr_fg: true,
+        ..InstallConfig::default()
+    };
+    let mut game = GameInfo {
+        title: "Test".into(),
+        path: std::env::temp_dir(),
+        exe_path: None,
+        store: Store::Custom,
+        app_id: None,
+        api: GraphicsApi::DirectX12,
+        is_64bit: true,
+        has_native_dlss: false,
+        is_re_engine: false,
+        anticheat: None,
+        fidelityfx_tier: None,
+        compat: Default::default(),
+    };
+    assert!(anr_fg_applies(&config, &game));
+    assert!(!anr_fg_applies(&InstallConfig::default(), &game));
+
+    game.api = GraphicsApi::DirectX11;
+    assert!(!anr_fg_applies(&config, &game));
+    game.api = GraphicsApi::Vulkan;
+    assert!(!anr_fg_applies(&config, &game));
+}
