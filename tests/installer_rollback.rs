@@ -247,7 +247,9 @@ fn install_refuses_a_game_that_has_amdlss5_and_leaves_its_files_alone() {
     )
     .unwrap_err();
 
-    assert!(err.to_string().contains("AMDLSS5"), "{err}");
+    let msg = err.to_string();
+    assert!(msg.contains("AMDLSS5"), "{msg}");
+    assert!(!msg.contains("  "), "stray spaces in: {msg}");
     assert_eq!(fs::read(dir.join("version.dll")).unwrap(), b"amdlss5 proxy");
     assert!(!dir.join(MANIFEST_NAME).exists());
     let _ = fs::remove_dir_all(&dir);
